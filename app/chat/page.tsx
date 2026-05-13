@@ -13,6 +13,7 @@ import { getInitialLang, t } from '@/lib/i18n';
 import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
 import { loadChats, saveChats, makeChat, upsertChat } from '@/lib/chats';
 import { compressImage, isUrl } from '@/lib/image';
+import { mockProducts, inferMode } from '@/lib/mocks';
 import type {
   CartItem,
   Chat,
@@ -360,12 +361,16 @@ export default function ChatPage() {
   };
 
   const handleResponse = async (response: StandardResponse, baseMessages: Message[]) => {
-    const resolvedMode = response.mode;
+    let resolvedMode = response.mode;
+    if (resolvedMode === 'auto') {
+      resolvedMode = inferMode(response.text);
+    }
     const hasShoppingIntent =
       !!response.identifiedItem ||
       (response.suggestions?.length ?? 0) > 0 ||
       (response.retailers?.length ?? 0) > 0 ||
-      response.hasVisual;
+      response.hasVisual ||
+      resolvedMode !== 'price';
 
     let products: Product[] = response.retailers ?? [];
     if (hasShoppingIntent && products.length === 0) {
@@ -393,12 +398,14 @@ export default function ChatPage() {
           '';
         if (query) products = await fetchProducts(query, resolvedMode);
       }
+
+      if (products.length === 0) {
+        products = mockProducts(resolvedMode, lang);
+      }
     }
 
     const kind: Message['kind'] | undefined = hasShoppingIntent
-      ? resolvedMode === 'auto'
-        ? 'price'
-        : (resolvedMode as Message['kind'])
+      ? (resolvedMode as Message['kind'])
       : undefined;
 
     const aiMsg: Message = {
