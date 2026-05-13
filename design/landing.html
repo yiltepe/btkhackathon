@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>OBEN — Your shopping concierge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FAFAF8;
+    --ink:#111111;
+    --muted:#7A7A75;
+    --line:#E5E5E5;
+    --line-soft:#EDEDEA;
+    --pill:#F0F0EE;
+    --accent:#7C2D12;
+    --card:#FFFFFF;
+    --shadow: 0 1px 4px rgba(0,0,0,.06);
+    --shadow-item: 0 6px 18px -10px rgba(20,16,12,.18), 0 2px 4px rgba(20,16,12,.04);
+    --row-h: 200px;
+    --row-gap: 28px;
+    --speed-1: 80s;
+    --speed-2: 95s;
+    --speed-3: 70s;
+    --speed-4: 105s;
+    --speed-5: 88s;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Geist','Söhne','Inter',system-ui,sans-serif;font-weight:400;-webkit-font-smoothing:antialiased;letter-spacing:-0.005em}
+  body{min-height:100vh;overflow-x:hidden}
+
+  /* ============= NAV ============= */
+  header.nav{
+    position:fixed;top:0;left:0;right:0;z-index:30;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:22px 36px;
+    pointer-events:none;
+  }
+  header.nav .logo, header.nav .nav-right{ pointer-events:auto }
+  .logo{
+    font-size:18px;font-weight:500;letter-spacing:0.02em;
+    display:flex;align-items:center;gap:9px;color:var(--ink);text-decoration:none;
+  }
+  .logo .mark{
+    width:22px;height:22px;border:1.25px solid var(--ink);border-radius:50%;
+    display:grid;place-items:center;font-size:11px;font-weight:500;letter-spacing:0;
+  }
+  .nav-right{font-size:13px;color:var(--muted);display:flex;gap:24px;align-items:center}
+  .nav-right a{color:var(--muted);text-decoration:none}
+  .nav-right a:hover{color:var(--ink)}
+
+  /* ============= VITRINE ============= */
+  .vitrine{
+    position:fixed;inset:0;z-index:1;
+    display:flex;flex-direction:column;justify-content:center;
+    gap:var(--row-gap);
+    padding:80px 0;
+    overflow:hidden;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
+  }
+  .row{
+    display:flex;align-items:center;
+    width:max-content;
+    gap:18px;
+    will-change:transform;
+  }
+  .row.l{ animation: drift-l linear infinite }
+  .row.r{ animation: drift-r linear infinite }
+  .row.s1{ animation-duration: var(--speed-1) }
+  .row.s2{ animation-duration: var(--speed-2) }
+  .row.s3{ animation-duration: var(--speed-3) }
+  .row.s4{ animation-duration: var(--speed-4) }
+  .row.s5{ animation-duration: var(--speed-5) }
+  @keyframes drift-l{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  @keyframes drift-r{ from{transform:translateX(-50%)} to{transform:translateX(0)} }
+
+  .item{
+    flex:0 0 auto;
+    height:var(--row-h);
+    display:flex;align-items:flex-end;justify-content:center;
+    background:var(--card);
+    border:1px solid var(--line-soft);
+    border-radius:4px;
+    box-shadow: var(--shadow-item);
+    padding:14px 18px 16px;
+    position:relative;
+  }
+  .item .tag{
+    position:absolute;top:10px;left:12px;font-size:9px;letter-spacing:.12em;
+    color:var(--muted);text-transform:uppercase;font-weight:500;
+  }
+  .item .price{
+    position:absolute;bottom:10px;right:12px;font-size:10px;color:var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .item svg{height:100%;width:auto;display:block}
+
+  /* Hanger items (clothing) — taller / narrower */
+  .item.hanger{width:150px;padding-top:8px;align-items:stretch;justify-content:flex-start;flex-direction:column}
+  .item.hanger .hanger-rod{
+    height:8px;border-bottom:1px solid #D8D6D1;margin-bottom:-4px;position:relative;
+  }
+  .item.hanger .hanger-rod::after{
+    content:'';position:absolute;left:50%;top:-4px;width:1px;height:8px;background:#C9C5BD;transform:translateX(-50%);
+  }
+  .item.hanger .hanger-rod::before{
+    content:'';position:absolute;left:50%;top:-7px;width:10px;height:5px;border:1px solid #C9C5BD;border-bottom:0;border-radius:50% 50% 0 0/100% 100% 0 0;transform:translateX(-50%);
+  }
+  .item.hanger svg{margin-top:6px;flex:1;min-height:0;width:100%;height:auto;max-height:calc(var(--row-h) - 50px)}
+
+  /* Square (home/beauty/electronics) */
+  .item.square{width:170px;align-items:center;padding:18px}
+  .item.square svg{max-height:74%;max-width:80%;width:auto;height:auto}
+
+  /* ============= FOREGROUND ============= */
+  .stage{
+    position:relative;z-index:10;
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding: 0 24px;
+    pointer-events:none;
+  }
+  .stage > *{pointer-events:auto}
+  .hero{
+    text-align:center;
+    background: rgba(250,250,248, 0.9);
+    padding: 56px 60px 48px;
+    border-radius:6px;
+    box-shadow: 0 0 0 1px rgba(229,229,229,.55), 0 4px 30px -16px rgba(20,16,12,.08);
+    max-width: 720px;
+  }
+  .eyebrow{
+    font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);
+    margin-bottom:24px;font-weight:500;
+  }
+  .eyebrow .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;transform:translateY(-1px)}
+  .wordmark{
+    font-size: clamp(72px, 13vw, 168px);
+    font-weight:500;
+    line-height:.92;
+    letter-spacing:-0.045em;
+    margin:0 0 28px;
+  }
+  .tagline{
+    font-size: clamp(17px, 1.5vw, 20px);
+    font-weight:400;
+    color:var(--ink);
+    max-width:520px;
+    margin: 0 auto 40px;
+    line-height:1.45;
+    letter-spacing:-0.01em;
+    text-wrap:balance;
+  }
+  .tagline em{font-style:normal;color:var(--muted)}
+  .cta{
+    display:inline-flex;align-items:center;gap:10px;
+    background:var(--accent);color:#FAFAF8;
+    text-decoration:none;
+    padding:14px 26px;
+    border-radius:6px;
+    font-size:14px;font-weight:500;
+    letter-spacing:.005em;
+    transition: transform .18s ease, background .18s ease;
+    border:1px solid var(--accent);
+  }
+  .cta:hover{ background:#5A1F0C; transform: translateY(-1px) }
+  .cta:active{ transform: translateY(0) }
+  .cta svg{width:14px;height:14px}
+
+  /* meta strip */
+  .meta{
+    position:fixed;left:36px;bottom:24px;z-index:25;
+    font-size:11px;color:var(--muted);letter-spacing:.06em;
+    text-transform:uppercase;font-weight:500;
+    display:flex;gap:18px;align-items:center;
+  }
+  .meta .sep{width:24px;height:1px;background:var(--line)}
+  .meta-r{
+    position:fixed;right:36px;bottom:24px;z-index:25;
+    font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.04em;
+    font-variant-numeric:tabular-nums;
+  }
+
+  @media (max-width:720px){
+    :root{--row-h: 150px}
+    .item.hanger{width:108px}
+    .item.square{width:130px;padding:14px}
+    header.nav{padding:18px 20px}
+    .meta{left:20px;bottom:18px}
+    .meta-r{right:20px;bottom:18px}
+    .hero{padding:36px 22px}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .row{ animation: none !important }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <a class="logo" href="landing.html">
+    <span class="mark">O</span>
+    OBEN
+  </a>
+  <div class="nav-right">
+    <a href="#">Journal</a>
+    <a href="#">About</a>
+    <a href="chat.html">Open app →</a>
+  </div>
+</header>
+
+<!-- VITRINE BACKGROUND -->
+<div class="vitrine" id="vitrine" aria-hidden="true"></div>
+
+<!-- FOREGROUND -->
+<main class="stage">
+  <section class="hero">
+    <div class="eyebrow"><span class="dot"></span>An AI shopping concierge</div>
+    <h1 class="wordmark">OBEN</h1>
+    <p class="tagline">Drop a link. <em>Better prices, perfect matches, your next look.</em></p>
+    <a class="cta" href="chat.html">
+      Get Started
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </a>
+  </section>
+</main>
+
+<div class="meta">
+  <span>SS · 26</span>
+  <span class="sep"></span>
+  <span>The Vitrine</span>
+</div>
+<div class="meta-r">Index 001 — 064</div>
+
+<!-- Item SVG library + row builder -->
+<script>
+/* ============ ITEM CATALOG ==============
+   Each item: { kind:'hanger'|'square', tag, price, svg }
+   Drawn as restrained single-color silhouettes — editorial, not realistic.
+*/
+const INK = '#1A1714';
+const INK2 = '#2D2620';
+const STROKE = '#2D2620';
+
+function gItem(inner, vw=100, vh=130){
+  return `<svg viewBox="0 0 ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
+}
+
+const ITEMS = [
+  // ===== FASHION (hanger) =====
+  { kind:'hanger', tag:'KNIT', price:'€189', svg: gItem(`
+    <path d="M50 8 C42 8 38 12 36 18 L20 28 L14 60 L24 62 L26 118 L74 118 L76 62 L86 60 L80 28 L64 18 C62 12 58 8 50 8 Z" fill="#3A322B"/>
+    <path d="M40 18 C42 14 46 12 50 12 C54 12 58 14 60 18" stroke="#5C5048" stroke-width="0.6" fill="none"/>
+  `)},
+  { kind:'hanger', tag:'SHIRT', price:'€95', svg: gItem(`
+    <path d="M50 6 C45 6 41 9 39 13 L22 22 L14 48 L26 54 L28 118 L72 118 L74 54 L86 48 L78 22 L61 13 C59 9 55 6 50 6 Z" fill="#E8E4DC" stroke="#C9C2B5" stroke-width="0.6"/>
+    <line x1="50" y1="14" x2="50" y2="118" stroke="#C9C2B5" stroke-width="0.5"/>
+    <circle cx="50" cy="42" r="0.7" fill="#A29A8C"/>
+    <circle cx="50" cy="58" r="0.7" fill="#A29A8C"/>
+    <circle cx="50" cy="74" r="0.7" fill="#A29A8C"/>
+    <circle cx="50" cy="90" r="0.7" fill="#A29A8C"/>
+  `)},
+  { kind:'hanger', tag:'COAT', price:'€420', svg: gItem(`
+    <path d="M50 6 C45 6 41 9 39 14 L20 24 L12 56 L22 60 L20 122 L80 122 L78 60 L88 56 L80 24 L61 14 C59 9 55 6 50 6 Z" fill="#7B5E3F"/>
+    <path d="M48 14 L48 122 M52 14 L52 122" stroke="#5E4528" stroke-width="0.5"/>
+    <rect x="46" y="60" width="8" height="2" fill="#5E4528"/>
+  `)},
+  { kind:'hanger', tag:'DRESS', price:'€245', svg: gItem(`
+    <path d="M50 8 C44 8 40 11 38 16 L26 22 L22 36 L34 38 L18 120 L82 120 L66 38 L78 36 L74 22 L62 16 C60 11 56 8 50 8 Z" fill="#1F2A26"/>
+  `)},
+  { kind:'hanger', tag:'BLAZER', price:'€340', svg: gItem(`
+    <path d="M50 8 C44 8 40 11 38 16 L22 24 L14 54 L26 58 L28 118 L72 118 L74 58 L86 54 L78 24 L62 16 C60 11 56 8 50 8 Z" fill="#0D0D0D"/>
+    <path d="M50 16 L42 116 M50 16 L58 116" stroke="#2B2B2B" stroke-width="0.5"/>
+    <path d="M50 16 L46 30 L50 38 L54 30 Z" fill="#1A1A1A"/>
+  `)},
+  { kind:'hanger', tag:'TROUSERS', price:'€175', svg: gItem(`
+    <path d="M36 10 H64 L66 26 L62 118 L52 118 L50 60 L48 118 L38 118 L34 26 Z" fill="#7A6E55"/>
+    <line x1="50" y1="10" x2="50" y2="60" stroke="#5F5642" stroke-width="0.5"/>
+  `)},
+  { kind:'hanger', tag:'KNIT', price:'€220', svg: gItem(`
+    <path d="M50 8 C44 8 40 11 38 16 L22 24 L14 54 L26 58 L28 116 L72 116 L74 58 L86 54 L78 24 L62 16 C60 11 56 8 50 8 Z" fill="#C5A584"/>
+    <path d="M28 60 H72 M28 75 H72 M28 90 H72 M28 105 H72" stroke="#A78460" stroke-width="0.4" stroke-dasharray="1.5 1"/>
+  `)},
+  { kind:'hanger', tag:'SHIRT', price:'€110', svg: gItem(`
+    <path d="M50 6 C45 6 41 9 39 13 L22 22 L14 48 L26 54 L28 118 L72 118 L74 54 L86 48 L78 22 L61 13 C59 9 55 6 50 6 Z" fill="#0F2540" stroke="#0A1B30" stroke-width="0.4"/>
+    <line x1="50" y1="14" x2="50" y2="118" stroke="#1F3A60" stroke-width="0.5"/>
+  `)},
+  { kind:'hanger', tag:'CARDIGAN', price:'€260', svg: gItem(`
+    <path d="M50 8 C44 8 40 11 38 16 L22 24 L14 54 L26 58 L28 118 L72 118 L74 58 L86 54 L78 24 L62 16 C60 11 56 8 50 8 Z" fill="#EFE7D6" stroke="#D2C8B0" stroke-width="0.5"/>
+    <line x1="50" y1="14" x2="50" y2="118" stroke="#C8BD9F" stroke-width="0.4"/>
+    <circle cx="50" cy="50" r="1" fill="#A99C7A"/>
+    <circle cx="50" cy="72" r="1" fill="#A99C7A"/>
+    <circle cx="50" cy="94" r="1" fill="#A99C7A"/>
+  `)},
+  { kind:'hanger', tag:'SKIRT', price:'€145', svg: gItem(`
+    <path d="M36 12 H64 L72 24 L84 118 L16 118 L28 24 Z" fill="#5C2018"/>
+    <path d="M28 24 H72" stroke="#3E140F" stroke-width="0.5"/>
+  `)},
+  { kind:'hanger', tag:'TEE', price:'€55', svg: gItem(`
+    <path d="M50 10 C46 10 42 13 40 18 L22 26 L18 44 L30 48 L30 112 L70 112 L70 48 L82 44 L78 26 L60 18 C58 13 54 10 50 10 Z" fill="#F4F1EA"/>
+  `)},
+  { kind:'hanger', tag:'JACKET', price:'€385', svg: gItem(`
+    <path d="M50 8 C44 8 40 11 38 16 L22 24 L14 54 L26 58 L28 118 L72 118 L74 58 L86 54 L78 24 L62 16 C60 11 56 8 50 8 Z" fill="#2C3826"/>
+    <rect x="34" y="60" width="10" height="14" fill="none" stroke="#1B2417" stroke-width="0.5"/>
+    <rect x="56" y="60" width="10" height="14" fill="none" stroke="#1B2417" stroke-width="0.5"/>
+  `)},
+  // ===== HOME & LIVING (square) =====
+  { kind:'square', tag:'LAMP', price:'€189', svg: gItem(`
+    <path d="M28 14 L72 14 L62 46 L38 46 Z" fill="#E8DCC2" stroke="#B59E72" stroke-width="0.5"/>
+    <line x1="50" y1="46" x2="50" y2="98" stroke="#5A4A30" stroke-width="1.2"/>
+    <ellipse cx="50" cy="102" rx="22" ry="4" fill="#5A4A30"/>
+  `, 100, 110)},
+  { kind:'square', tag:'CHAIR', price:'€520', svg: gItem(`
+    <path d="M22 22 Q22 12 32 12 H68 Q78 12 78 22 V62 H22 Z" fill="#8C6B3E"/>
+    <rect x="22" y="62" width="56" height="10" fill="#6E5430"/>
+    <line x1="26" y1="72" x2="26" y2="100" stroke="#3E2E18" stroke-width="2"/>
+    <line x1="74" y1="72" x2="74" y2="100" stroke="#3E2E18" stroke-width="2"/>
+    <line x1="30" y1="72" x2="30" y2="96" stroke="#3E2E18" stroke-width="2"/>
+    <line x1="70" y1="72" x2="70" y2="96" stroke="#3E2E18" stroke-width="2"/>
+  `, 100, 110)},
+  { kind:'square', tag:'VASE', price:'€78', svg: gItem(`
+    <path d="M40 10 H60 L58 22 Q72 30 72 60 Q72 92 50 100 Q28 92 28 60 Q28 30 42 22 Z" fill="#C9A87C" stroke="#9E7D52" stroke-width="0.5"/>
+    <path d="M44 14 Q42 30 50 38 Q58 30 56 14" stroke="#8E6B3F" stroke-width="0.6" fill="none"/>
+  `, 100, 110)},
+  { kind:'square', tag:'RUG', price:'€640', svg: gItem(`
+    <rect x="14" y="20" width="72" height="70" fill="#5C2018" stroke="#3E140F" stroke-width="0.5"/>
+    <rect x="20" y="26" width="60" height="58" fill="none" stroke="#E8DCC2" stroke-width="0.6"/>
+    <rect x="32" y="38" width="36" height="34" fill="none" stroke="#E8DCC2" stroke-width="0.5"/>
+    <line x1="14" y1="55" x2="86" y2="55" stroke="#E8DCC2" stroke-width="0.3" stroke-dasharray="2 2"/>
+  `, 100, 110)},
+  { kind:'square', tag:'TABLE', price:'€890', svg: gItem(`
+    <ellipse cx="50" cy="32" rx="38" ry="10" fill="#A37748"/>
+    <path d="M12 32 V40 Q50 50 88 40 V32" fill="#7B5429"/>
+    <line x1="22" y1="42" x2="20" y2="100" stroke="#3E2E18" stroke-width="2"/>
+    <line x1="78" y1="42" x2="80" y2="100" stroke="#3E2E18" stroke-width="2"/>
+    <line x1="50" y1="46" x2="50" y2="100" stroke="#3E2E18" stroke-width="2"/>
+  `, 100, 110)},
+  { kind:'square', tag:'MIRROR', price:'€310', svg: gItem(`
+    <rect x="34" y="10" width="32" height="90" rx="16" fill="#EFE7D6" stroke="#9E8B66" stroke-width="1.2"/>
+    <rect x="38" y="14" width="24" height="82" rx="12" fill="#D9D2C2"/>
+    <path d="M40 22 Q50 30 60 22" stroke="#FAFAF8" stroke-width="0.6" fill="none" opacity=".7"/>
+  `, 100, 110)},
+  // ===== BEAUTY (square) =====
+  { kind:'square', tag:'LIPSTICK', price:'€36', svg: gItem(`
+    <rect x="42" y="14" width="16" height="20" fill="#7C2D12"/>
+    <path d="M42 14 L50 6 L58 14 Z" fill="#9C3D20"/>
+    <rect x="38" y="34" width="24" height="36" fill="#1A1714"/>
+    <rect x="36" y="68" width="28" height="6" fill="#C9A268"/>
+    <rect x="38" y="74" width="24" height="22" fill="#1A1714"/>
+  `, 100, 110)},
+  { kind:'square', tag:'SERUM', price:'€68', svg: gItem(`
+    <rect x="38" y="10" width="24" height="8" fill="#1A1714"/>
+    <rect x="42" y="18" width="16" height="6" fill="#2D2620"/>
+    <rect x="34" y="24" width="32" height="70" rx="3" fill="#D9C8A8"/>
+    <rect x="40" y="44" width="20" height="18" fill="none" stroke="#7A6240" stroke-width="0.4"/>
+    <text x="50" y="56" font-family="Geist, sans-serif" font-size="6" fill="#5A4628" text-anchor="middle" font-weight="500">SERUM</text>
+  `, 100, 110)},
+  { kind:'square', tag:'CREAM', price:'€95', svg: gItem(`
+    <rect x="26" y="38" width="48" height="56" rx="2" fill="#EFE7D6" stroke="#C8BD9F" stroke-width="0.5"/>
+    <rect x="26" y="38" width="48" height="14" fill="#1A1714"/>
+    <text x="50" y="74" font-family="Geist, sans-serif" font-size="6" fill="#5A4628" text-anchor="middle" font-weight="500">CRÈME</text>
+    <line x1="32" y1="80" x2="68" y2="80" stroke="#9E8B66" stroke-width="0.3"/>
+  `, 100, 110)},
+  { kind:'square', tag:'FRAGRANCE', price:'€140', svg: gItem(`
+    <rect x="44" y="8" width="12" height="14" fill="#1A1714"/>
+    <rect x="38" y="22" width="24" height="6" fill="#C9A268"/>
+    <path d="M30 28 H70 V96 Q70 100 66 100 H34 Q30 100 30 96 Z" fill="#F4E9CC" stroke="#B59E72" stroke-width="0.4"/>
+    <rect x="36" y="50" width="28" height="12" fill="none" stroke="#7A6240" stroke-width="0.4"/>
+    <text x="50" y="58" font-family="Geist, sans-serif" font-size="5" fill="#5A4628" text-anchor="middle" font-weight="500">N° 04</text>
+  `, 100, 110)},
+  // ===== ELECTRONICS (square) =====
+  { kind:'square', tag:'HEADPHONES', price:'€420', svg: gItem(`
+    <path d="M20 60 Q20 18 50 18 Q80 18 80 60" stroke="#1A1714" stroke-width="4" fill="none"/>
+    <rect x="14" y="56" width="14" height="32" rx="6" fill="#1A1714"/>
+    <rect x="72" y="56" width="14" height="32" rx="6" fill="#1A1714"/>
+    <rect x="16" y="60" width="10" height="24" rx="4" fill="#C9A268" opacity=".6"/>
+    <rect x="74" y="60" width="10" height="24" rx="4" fill="#C9A268" opacity=".6"/>
+  `, 100, 110)},
+  { kind:'square', tag:'CAMERA', price:'€1,240', svg: gItem(`
+    <rect x="14" y="34" width="72" height="48" rx="3" fill="#1A1714"/>
+    <rect x="36" y="28" width="28" height="8" fill="#1A1714"/>
+    <circle cx="50" cy="58" r="18" fill="#0A0908" stroke="#3E3530" stroke-width="1.5"/>
+    <circle cx="50" cy="58" r="12" fill="#1A1714"/>
+    <circle cx="50" cy="58" r="6" fill="#2D2620"/>
+    <circle cx="56" cy="54" r="1.5" fill="#C9A268" opacity=".4"/>
+    <rect x="68" y="38" width="6" height="3" fill="#5A4628"/>
+  `, 100, 110)},
+  { kind:'square', tag:'WATCH', price:'€680', svg: gItem(`
+    <rect x="38" y="6" width="24" height="14" fill="#3E3530"/>
+    <rect x="38" y="84" width="24" height="20" fill="#3E3530"/>
+    <rect x="30" y="20" width="40" height="64" rx="8" fill="#1A1714" stroke="#5A4628" stroke-width="1"/>
+    <rect x="34" y="26" width="32" height="50" rx="5" fill="#0A0908"/>
+    <text x="50" y="48" font-family="Geist, sans-serif" font-size="7" fill="#C9A268" text-anchor="middle" font-weight="500">10:42</text>
+    <line x1="38" y1="58" x2="62" y2="58" stroke="#3E3530" stroke-width="0.5"/>
+    <text x="50" y="68" font-family="Geist, sans-serif" font-size="4" fill="#7A6240" text-anchor="middle">TUE 14</text>
+  `, 100, 110)},
+  { kind:'square', tag:'SPEAKER', price:'€295', svg: gItem(`
+    <rect x="28" y="12" width="44" height="88" rx="6" fill="#2D2620"/>
+    <circle cx="50" cy="32" r="9" fill="#0A0908" stroke="#5A4628" stroke-width="0.6"/>
+    <circle cx="50" cy="32" r="3" fill="#3E3530"/>
+    <circle cx="50" cy="60" r="15" fill="#0A0908" stroke="#5A4628" stroke-width="0.6"/>
+    <circle cx="50" cy="60" r="6" fill="#3E3530"/>
+    <rect x="42" y="86" width="16" height="3" fill="#5A4628" opacity=".5"/>
+  `, 100, 110)},
+  // ===== SHOES (square) =====
+  { kind:'square', tag:'LOAFER', price:'€330', svg: gItem(`
+    <path d="M14 60 Q14 50 24 48 L72 44 Q86 46 86 58 Q86 70 76 72 L24 72 Q14 72 14 60 Z" fill="#5C2018"/>
+    <path d="M40 50 Q40 56 50 56 Q60 56 60 50" stroke="#3E140F" stroke-width="0.6" fill="none"/>
+    <rect x="46" y="52" width="8" height="1.5" fill="#C9A268"/>
+  `, 100, 110)},
+  { kind:'square', tag:'SNEAKER', price:'€175', svg: gItem(`
+    <path d="M14 62 Q14 52 22 50 L40 46 Q44 38 56 38 Q72 38 80 52 Q86 56 86 64 L86 72 L14 72 Z" fill="#EFE7D6" stroke="#C8BD9F" stroke-width="0.4"/>
+    <path d="M40 46 L44 64 M50 42 L54 64 M60 42 L64 64" stroke="#C8BD9F" stroke-width="0.6"/>
+    <rect x="14" y="68" width="72" height="4" fill="#7A6E55"/>
+  `, 100, 110)},
+  { kind:'square', tag:'BOOT', price:'€590', svg: gItem(`
+    <path d="M30 14 L60 14 L62 40 Q86 46 86 60 L86 72 L14 72 L14 60 Q14 50 28 46 Z" fill="#3E2E18"/>
+    <line x1="30" y1="20" x2="60" y2="20" stroke="#1F1810" stroke-width="0.5"/>
+    <line x1="30" y1="28" x2="60" y2="28" stroke="#1F1810" stroke-width="0.5"/>
+    <rect x="14" y="68" width="72" height="4" fill="#1F1810"/>
+  `, 100, 110)},
+  // ===== ACCESSORIES (square) =====
+  { kind:'square', tag:'BAG', price:'€695', svg: gItem(`
+    <path d="M30 26 Q30 14 50 14 Q70 14 70 26 L70 32" stroke="#3E2E18" stroke-width="2.5" fill="none"/>
+    <rect x="20" y="30" width="60" height="58" rx="3" fill="#7B5429"/>
+    <rect x="20" y="30" width="60" height="8" fill="#5C3F1E"/>
+    <circle cx="50" cy="60" r="3" fill="#3E2E18"/>
+  `, 100, 110)},
+  { kind:'square', tag:'SCARF', price:'€220', svg: gItem(`
+    <path d="M20 18 L80 18 L78 60 Q70 80 50 82 Q30 80 22 60 Z" fill="#5C2018"/>
+    <path d="M28 30 L72 30 M28 42 L72 42 M28 54 L72 54" stroke="#E8DCC2" stroke-width="0.4" stroke-dasharray="3 2"/>
+    <path d="M30 70 Q50 76 70 70" stroke="#3E140F" stroke-width="0.4" fill="none"/>
+  `, 100, 110)},
+  { kind:'square', tag:'BELT', price:'€140', svg: gItem(`
+    <rect x="10" y="48" width="80" height="14" rx="2" fill="#3E2E18"/>
+    <rect x="58" y="44" width="20" height="22" fill="none" stroke="#C9A268" stroke-width="1.5"/>
+    <rect x="64" y="52" width="2" height="6" fill="#C9A268"/>
+    <line x1="14" y1="55" x2="56" y2="55" stroke="#1F1810" stroke-width="0.4" stroke-dasharray="1 2"/>
+  `, 100, 110)},
+];
+
+/* shuffle helper */
+function shuf(a){ const r=a.slice(); for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[r[i],r[j]]=[r[j],r[i]]} return r }
+
+/* Build rows. We compose 5 rows. Each row gets a doubled set of items so the CSS keyframe (translate -50%) loops seamlessly. */
+function buildRow(items, opts){
+  const wrap = document.createElement('div');
+  wrap.className = `row ${opts.dir} ${opts.speed}`;
+  const dup = items.concat(items);
+  dup.forEach(it => {
+    const el = document.createElement('div');
+    el.className = `item ${it.kind}`;
+    if(it.kind === 'hanger'){
+      el.innerHTML = `
+        <span class="tag">${it.tag}</span>
+        <div class="hanger-rod"></div>
+        ${it.svg}
+        <span class="price">${it.price}</span>
+      `;
+    } else {
+      el.innerHTML = `
+        <span class="tag">${it.tag}</span>
+        ${it.svg}
+        <span class="price">${it.price}</span>
+      `;
+    }
+    wrap.appendChild(el);
+  });
+  return wrap;
+}
+
+const vit = document.getElementById('vitrine');
+// Curate per-row mix
+const fashion = ITEMS.filter(i => i.kind === 'hanger');
+const objects = ITEMS.filter(i => i.kind === 'square');
+
+const rows = [
+  { items: shuf(fashion).concat(shuf(objects).slice(0,3)),     dir:'l', speed:'s1' },
+  { items: shuf(objects).concat(shuf(fashion).slice(0,4)),     dir:'r', speed:'s2' },
+  { items: shuf(fashion),                                       dir:'l', speed:'s3' },
+  { items: shuf(objects).concat(shuf(fashion).slice(0,2)),     dir:'r', speed:'s4' },
+  { items: shuf(fashion).concat(shuf(objects).slice(0,2)),     dir:'l', speed:'s5' },
+];
+rows.forEach(r => vit.appendChild(buildRow(shuf(r.items), r)));
+</script>
+
+</body>
+</html>
