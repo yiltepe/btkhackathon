@@ -54,9 +54,24 @@ const HOME_ITEMS_TR: Product[] = [
   { name: 'Seramik vazo', price: 890, currency: 'TRY', thumbnail: 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?w=400&q=80', link: 'https://karaca.com', retailer: 'Karaca' },
 ];
 
+const ELECTRONICS_ITEMS_EN: Product[] = [
+  { name: 'iPhone 15 Pro · 256GB', price: 1199, currency: 'EUR', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://apple.com', retailer: 'Apple' },
+  { name: 'iPhone 15 Pro · 256GB', price: 1229, currency: 'EUR', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://amazon.de', retailer: 'Amazon DE' },
+  { name: 'iPhone 15 Pro · 256GB', price: 1249, currency: 'EUR', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://mediamarkt.de', retailer: 'MediaMarkt' },
+  { name: 'iPhone 15 Pro · 256GB', price: 1279, currency: 'EUR', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://saturn.de', retailer: 'Saturn' },
+];
+
+const ELECTRONICS_ITEMS_TR: Product[] = [
+  { name: 'iPhone 15 · 128GB', price: 58999, currency: 'TRY', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://trendyol.com', retailer: 'Trendyol' },
+  { name: 'iPhone 15 · 128GB', price: 59499, currency: 'TRY', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://hepsiburada.com', retailer: 'Hepsiburada' },
+  { name: 'iPhone 15 · 128GB', price: 59999, currency: 'TRY', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://vatanbilgisayar.com', retailer: 'Vatan' },
+  { name: 'iPhone 15 · 128GB', price: 60499, currency: 'TRY', thumbnail: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&q=80', link: 'https://mediamarkt.com.tr', retailer: 'MediaMarkt TR' },
+];
+
 export function mockProducts(mode: Mode, lang: Lang): Product[] {
   if (mode === 'fashion') return lang === 'tr' ? FASHION_ITEMS_TR : FASHION_ITEMS_EN;
   if (mode === 'home') return lang === 'tr' ? HOME_ITEMS_TR : HOME_ITEMS_EN;
+  if (mode === 'electronics') return lang === 'tr' ? ELECTRONICS_ITEMS_TR : ELECTRONICS_ITEMS_EN;
   return lang === 'tr' ? RETAILERS_TR : RETAILERS_EN;
 }
 
