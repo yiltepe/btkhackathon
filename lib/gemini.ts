@@ -1,8 +1,8 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { Lang, Mode } from './types';
 
-export const GEMINI_TEXT_MODEL = 'gemini-1.5-flash';
-export const GEMINI_IMAGE_MODEL = 'gemini-2.0-flash-exp-image-generation';
+export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
+export const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
 
 export function hasGemini(): boolean {
   return !!process.env.GEMINI_API_KEY;
