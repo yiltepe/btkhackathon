@@ -41,11 +41,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const basePrompt = language === 'tr'
-      ? 'Bu görseli analiz et ve önerilerini JSON olarak döndür.'
-      : 'Analyze this image and return suggestions as JSON.';
     const preamble = buildContextPreamble(gender, budget, language);
-    const parts = [preamble, basePrompt, message ? `User request: ${message}` : ''].filter(Boolean);
+    const parts = [preamble, message ?? ''].filter(Boolean);
     const promptText = parts.join('\n\n');
 
     console.log('\n========== [api/analyze] GEMINI REQUEST ==========');
@@ -75,9 +72,16 @@ export async function POST(req: NextRequest) {
     console.log('--- Response Text ---');
     console.log(text);
     console.log('===================================================\n');
-    const parsed = JSON.parse(text);
-    return NextResponse.json(parsed);
-  } catch {
+    try {
+      const parsed = JSON.parse(text);
+      return NextResponse.json(parsed);
+    } catch (parseErr) {
+      console.error('[api/analyze] JSON parse failed; raw text was:\n', text);
+      console.error('[api/analyze] parse error:', parseErr);
+      return NextResponse.json(mockResponse(mode, language, '[image]'));
+    }
+  } catch (err) {
+    console.error('[api/analyze] Gemini error → falling back to mock:', err);
     return NextResponse.json(mockResponse(mode, language, '[image]'));
   }
 }

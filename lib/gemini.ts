@@ -38,7 +38,7 @@ INTENT C — BUILD_OUTFIT. Triggered by styling words: "outfit", "style", "match
   - \`hasVisual\` = true. \`imagePrompt\` = English. Format: "Editorial flat-lay on soft neutral background. Outfit featuring: [piece visualDescriptions], plus the exact reference [anchor type] shown. Clean magazine styling, no text." Use "the exact reference X shown" ONLY if the user actually provided a link/image of the anchor; otherwise describe the anchor by its color/style instead.
   - End \`text\` with an explicit, short follow-up question asking the user whether they want you to generate the AI visual preview now (e.g. "Want me to generate the visual preview of this look?"). Do NOT generate or assume — the visual is only built after the user confirms by clicking.
 
-INTENT D — ANALYZE (user pasted link/image, no clear intent) → treat as FIND_ITEM.
+INTENT D — ANALYZE (user pasted link/image, no clear intent) → treat as FIND_ITEM. NOTE: If the user message contains any styling word ("outfit", "style", "match", "kombin", "buna uygun", "ile ne giyilir") this intent is NEVER chosen — use INTENT C instead.
 
 \`text\` in user's language. \`searchQuery\` in UI language. \`imagePrompt\` always English. Return JSON matching the schema. Leave \`clarify\` empty.`,
     tr: `Sen Oben adlı alışveriş asistanısın. TEK bir niyet seç ve cevap ver. \`clarify\` alanını ASLA kullanma — mesaj tek bir kelime bile olsa makul varsayımlarla devam et.
@@ -58,7 +58,7 @@ NİYET C — KOMBİN_OLUŞTUR. Tetikleyici kelimeler: "kombin", "kombin oluştur
   - \`hasVisual\` = true. \`imagePrompt\` İngilizce. Format: "Editorial flat-lay on soft neutral background. Outfit featuring: [piece visualDescription listesi], plus the exact reference [anchor type] shown. Clean magazine styling, no text." "the exact reference X shown" ifadesini SADECE kullanıcı gerçekten link/görsel verdiyse kullan; aksi halde çapayı renk/stil ile tarif et.
   - \`text\` mesajının sonuna mutlaka kısa bir onay sorusu ekle: kullanıcıya yapay zeka görsel önizlemesini şimdi oluşturmamı isteyip istemediğini sor (örn. "Bu kombinin görselini de oluşturmamı ister misin?"). Görseli ASLA varsayma veya kendin başlatma — görsel yalnızca kullanıcı onaylayıp tıkladıktan sonra üretilir.
 
-NİYET D — ANALİZ (link/görsel var, net niyet yok) → ÜRÜN_BUL gibi davran.
+NİYET D — ANALİZ (link/görsel var, net niyet yok) → ÜRÜN_BUL gibi davran. NOT: Kullanıcı mesajında "kombin", "buna uygun", "ile ne giyilir", "stil ver", "outfit" gibi bir kelime varsa bu niyet ASLA seçilmez — bunun yerine NİYET C seç.
 
 \`text\` Türkçe. \`searchQuery\` Türkçe. \`imagePrompt\` daima İngilizce. Şemaya uyan JSON döndür. \`clarify\` BOŞ KALSIN.`,
   },

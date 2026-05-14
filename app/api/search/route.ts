@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
     products = applyBudgetFilter(products, budget);
     const priced = products.filter((p) => p.price !== null);
     if (priced.length < 3) {
+      console.warn(`[api/search] only ${priced.length} priced results for "${finalQuery}" → padding with mocks`);
       const padding = mockProducts(mode, language).filter(
         (m) => !products.some((p) => p.retailer === m.retailer),
       );
