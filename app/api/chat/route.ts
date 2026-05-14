@@ -71,12 +71,29 @@ export async function POST(req: NextRequest) {
 
     const urlMatch = message.match(/https?:\/\/\S+/);
     if (resolvedProduct) {
-      userParts.push(`The user pasted a product link. Here is the resolved product data:\nTitle: ${resolvedProduct.title}`);
+      userParts.push(`PRODUCT LINK SUCCESSFULLY FETCHED. Resolved product data:\nTitle: ${resolvedProduct.title}`);
       if (resolvedProduct.image) userParts.push(`Image URL: ${resolvedProduct.image}`);
       if (resolvedProduct.jsonLd) userParts.push(`Structured data (JSON-LD): ${JSON.stringify(resolvedProduct.jsonLd).slice(0, 2000)}`);
-      userParts.push('Use this resolved data — do not invent product details. Identify the item from the title and JSON-LD only.');
+      userParts.push(
+        `REQUIRED — use this resolved data; do NOT invent product details. ` +
+        `Your \`text\` response MUST reference the actual product (its type, color, or distinctive name from the title) so the user can tell you read the page. ` +
+        (language === 'tr'
+          ? `Example: "Trivium baskılı siyah kadın tişörtün etrafında günlük bir kombin oluşturdum: …" — NOT "Bu tişörtle bir kombin oluşturalım".`
+          : `Example: "I built a casual look around your Trivium-print black women's tee: …" — NOT "Let's build an outfit with this t-shirt".`),
+      );
     } else if (urlMatch) {
-      userParts.push(`The user pasted a URL (${urlMatch[0]}) but we could not fetch the page. Do NOT invent a product. Ask the user briefly (in their language) to describe the product or share an image.`);
+      userParts.push(
+        `IMPORTANT — LINK COULD NOT BE FETCHED: The user pasted a URL (${urlMatch[0]}) but we could NOT access the page. You have ZERO information about what the actual product looks like beyond what the user typed in their message. Do NOT pretend you analyzed the link.\n\n` +
+        `RULES:\n` +
+        `1. If the user message provides any context (item type, outfit request, style keyword, product noun like "tişört"/"shoes"), PROCEED using ONLY that context. Do NOT ask for more info.\n` +
+        `2. Your \`text\` response MUST OPEN with one short honest sentence stating you couldn't access the link, then state your assumption. ` +
+        (language === 'tr'
+          ? `Example: "Linke erişemedim, mesajından kadın tişörtü olduğunu anlayarak şu kombini hazırladım:" then describe the outfit, then the visual question. `
+          : `Example: "I couldn't access that page; based on your message I built a look assuming a women's t-shirt:" then describe the outfit, then the visual question. `) +
+        `NEVER skip this disclosure — the user must know the link wasn't read.\n` +
+        `3. Do NOT invent specific product details (exact color, brand, print) that you can't know.\n` +
+        `4. Only ask the user to describe the item if their message contains absolutely zero hint about what it is.`,
+      );
     }
     userParts.push(`User message: ${message}`);
 

@@ -9,7 +9,6 @@ import type { Lang, Product } from '@/lib/types';
 
 export default function LookCard({
   variant,
-  description,
   items,
   onAdd,
   onOpenModal,
@@ -17,7 +16,6 @@ export default function LookCard({
   lang,
 }: {
   variant: 'fashion' | 'home';
-  description: string;
   items: Product[];
   onAdd: (p: Product) => void;
   onOpenModal: () => void;
@@ -58,19 +56,6 @@ export default function LookCard({
           {items.length} {t('card.fashion.pieces', lang)} · {formatPrice(total, currency)} {t('card.fashion.total', lang)}
         </span>
       </div>
-      <p
-        style={{
-          margin: 0,
-          padding: '14px 16px 6px',
-          fontSize: 14.5,
-          lineHeight: 1.55,
-          color: 'var(--ink)',
-          letterSpacing: '-.005em',
-        }}
-      >
-        {description}
-      </p>
-
       <ProductStrip items={items} onAdd={onAdd} onCompare={onCompare} />
 
       <div style={{ padding: '8px 16px 14px', borderTop: '1px solid var(--line-soft)' }}>

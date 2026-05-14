@@ -2,14 +2,11 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Glyph } from './Icons';
-import ModeSelector from './ModeSelector';
 import BudgetChip from './BudgetChip';
 import { t } from '@/lib/i18n';
-import type { Budget, Lang, Mode } from '@/lib/types';
+import type { Budget, Lang } from '@/lib/types';
 
 export default function InputBar({
-  mode,
-  setMode,
   value,
   setValue,
   onSend,
@@ -21,8 +18,6 @@ export default function InputBar({
   budget,
   onBudgetChange,
 }: {
-  mode: Mode;
-  setMode: (m: Mode) => void;
   value: string;
   setValue: (v: string) => void;
   onSend: () => void;
@@ -61,26 +56,12 @@ export default function InputBar({
           style={{
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'flex-end',
             padding: '8px 10px 4px',
             borderBottom: '1px dashed var(--line-soft)',
           }}
         >
-          <ModeSelector mode={mode} setMode={setMode} lang={lang} />
-          <div style={{ flex: 1 }} />
-          <div style={{ paddingRight: 8 }}>
-            <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
-          </div>
-          <span
-            style={{
-              fontSize: 11,
-              color: 'var(--muted-2)',
-              letterSpacing: '.04em',
-              paddingRight: 6,
-              fontWeight: 500,
-            }}
-          >
-            {t('chat.input.hint', lang)}
-          </span>
+          <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
         </div>
 
         {pendingFilePreview && (

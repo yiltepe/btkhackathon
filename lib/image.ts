@@ -39,3 +39,10 @@ const URL_RE = /^https?:\/\/[^\s]+$/i;
 export function isUrl(text: string): boolean {
   return URL_RE.test(text.trim());
 }
+
+const URL_EXTRACT_RE = /https?:\/\/[^\s]+/i;
+export function extractUrl(text: string): string | null {
+  const match = text.match(URL_EXTRACT_RE);
+  if (!match) return null;
+  return match[0].replace(/[),.;!?]+$/, '');
+}

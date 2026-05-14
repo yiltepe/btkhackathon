@@ -66,7 +66,7 @@ async function fetchWithTimeout(url: string, ms: number, headers: Record<string,
 }
 
 async function tryDirect(url: string) {
-  const res = await fetchWithTimeout(url, 8000, BROWSER_HEADERS);
+  const res = await fetchWithTimeout(url, 9000, BROWSER_HEADERS);
   if (!res.ok) return null;
   const html = await res.text();
   const $ = cheerio.load(html);
@@ -81,21 +81,37 @@ async function tryDirect(url: string) {
   const title = (ogTitle || docTitle || h1 || '').trim().slice(0, 240);
 
   let jsonLd: Record<string, unknown> | undefined;
+  const isProduct = (p: unknown): p is Record<string, unknown> => {
+    if (!p || typeof p !== 'object') return false;
+    const t = (p as { '@type'?: string | string[] })['@type'];
+    return t === 'Product' || (Array.isArray(t) && t.includes('Product'));
+  };
   $('script[type="application/ld+json"]').each((_, el) => {
     if (jsonLd) return;
     try {
       const parsed = JSON.parse($(el).contents().text());
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      const product = arr.find((p) => {
-        const t = (p as { '@type'?: string | string[] })['@type'];
-        return t === 'Product' || (Array.isArray(t) && t.includes('Product'));
-      });
+      const candidates: unknown[] = [];
+      const queue: unknown[] = Array.isArray(parsed) ? [...parsed] : [parsed];
+      while (queue.length) {
+        const node = queue.shift();
+        if (!node || typeof node !== 'object') continue;
+        candidates.push(node);
+        const graph = (node as { '@graph'?: unknown })['@graph'];
+        if (Array.isArray(graph)) queue.push(...graph);
+      }
+      const product = candidates.find(isProduct);
       if (product) jsonLd = product;
     } catch {
       /* ignore */
     }
   });
   if (!title && !jsonLd) return null;
+  // Reject bot-detection / error pages that return 200 with a useless title
+  const lc = title.toLowerCase();
+  const botSignals = ['just a moment', 'one more step', 'please wait', 'checking your browser',
+    'access denied', 'robot check', 'attention required', 'enable javascript',
+    'verification required', 'too many requests', 'service unavailable', 'cloudflare'];
+  if (!jsonLd && botSignals.some((s) => lc.includes(s))) return null;
   return { title: title || 'Product', image: ogImage, jsonLd };
 }
 

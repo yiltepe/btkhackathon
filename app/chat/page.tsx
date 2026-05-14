@@ -13,7 +13,7 @@ import GenderModal from '@/components/GenderModal';
 import { getInitialLang, t } from '@/lib/i18n';
 import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
 import { loadChats, saveChats, makeChat, upsertChat, deleteChat } from '@/lib/chats';
-import { compressImage, isUrl } from '@/lib/image';
+import { compressImage, extractUrl } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
 import { isTrusted } from '@/lib/retailers';
 import { defaultBudget, loadBudget, loadGender, saveBudget, saveGender } from '@/lib/prefs';
@@ -550,15 +550,16 @@ export default function ChatPage() {
     // Text-only path
     let attachment: Message['attachment'];
     let resolvedProduct: { title: string; image?: string; jsonLd?: Record<string, unknown> } | undefined;
-    if (isUrl(text)) {
-      attachment = { kind: 'link', label: text };
+    const detectedUrl = extractUrl(text);
+    if (detectedUrl) {
+      attachment = { kind: 'link', label: detectedUrl };
       setResolving(true);
       setStatus(t('chat.status.resolving', lang));
       try {
         const res = await fetch('/api/resolve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: text }),
+          body: JSON.stringify({ url: detectedUrl }),
         });
         if (res.ok) {
           const data = (await res.json()) as {
@@ -764,7 +765,6 @@ export default function ChatPage() {
                     ) : msg.kind === 'fashion' || msg.kind === 'home' ? (
                       <LookCard
                         variant={msg.kind}
-                        description={msg.text}
                         items={msg.products ?? []}
                         onAdd={addProductToCart}
                         onCompare={(p) => compareProduct(p, msg.kind as Mode)}
@@ -881,8 +881,6 @@ export default function ChatPage() {
         </section>
 
         <InputBar
-          mode={mode}
-          setMode={setMode}
           value={input}
           setValue={setInput}
           onSend={send}
