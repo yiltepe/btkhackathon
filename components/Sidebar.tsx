@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import Logo from './Logo';
 import { Glyph } from './Icons';
@@ -12,6 +12,7 @@ export default function Sidebar({
   activeId,
   onSelect,
   onNew,
+  onDelete,
   cartCount,
   onOpenCart,
   lang,
@@ -20,10 +21,12 @@ export default function Sidebar({
   activeId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
   cartCount: number;
   onOpenCart: () => void;
   lang: Lang;
 }) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
   return (
     <aside
       style={{
@@ -79,34 +82,67 @@ export default function Sidebar({
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '2px 8px' }}>
         {chats.map((c) => (
-          <button
+          <div
             key={c.id}
-            onClick={() => onSelect(c.id)}
-            className="oben-history-item"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '7px 10px',
-              borderRadius: 4,
-              fontSize: 12.5,
-              color: activeId === c.id ? 'var(--ink)' : 'var(--muted)',
-              background: activeId === c.id ? '#F4F1EA' : 'transparent',
-              fontWeight: activeId === c.id ? 500 : 400,
-              textAlign: 'left',
-            }}
+            style={{ position: 'relative' }}
+            onMouseEnter={() => setHoveredId(c.id)}
+            onMouseLeave={() => setHoveredId(null)}
           >
-            <span
+            <button
+              onClick={() => onSelect(c.id)}
+              className="oben-history-item"
               style={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '7px 10px',
+                paddingRight: 30,
+                borderRadius: 4,
+                fontSize: 12.5,
+                color: activeId === c.id ? 'var(--ink)' : 'var(--muted)',
+                background: activeId === c.id ? '#F4F1EA' : 'transparent',
+                fontWeight: activeId === c.id ? 500 : 400,
+                textAlign: 'left',
               }}
             >
-              {c.title}
-            </span>
-          </button>
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {c.title}
+              </span>
+            </button>
+            {hoveredId === c.id && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(c.id); }}
+                title={t('chat.delete', lang)}
+                style={{
+                  position: 'absolute',
+                  right: 6,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 20,
+                  height: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 3,
+                  color: 'var(--muted)',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+                onMouseEnter={(ev) => { ev.currentTarget.style.color = 'var(--ink)'; }}
+                onMouseLeave={(ev) => { ev.currentTarget.style.color = 'var(--muted)'; }}
+              >
+                <Glyph icon="close" size={11} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

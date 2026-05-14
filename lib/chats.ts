@@ -34,3 +34,7 @@ export function upsertChat(chats: Chat[], chat: Chat): Chat[] {
   const filtered = chats.filter(c => c.id !== chat.id);
   return [chat, ...filtered].slice(0, CAP);
 }
+
+export function deleteChat(chats: Chat[], id: string): Chat[] {
+  return chats.filter(c => c.id !== id);
+}

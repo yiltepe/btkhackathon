@@ -12,7 +12,7 @@ import CartDrawer from '@/components/CartDrawer';
 import GenderModal from '@/components/GenderModal';
 import { getInitialLang, t } from '@/lib/i18n';
 import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
-import { loadChats, saveChats, makeChat, upsertChat } from '@/lib/chats';
+import { loadChats, saveChats, makeChat, upsertChat, deleteChat } from '@/lib/chats';
 import { compressImage, isUrl } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
 import { defaultBudget, loadBudget, loadGender, saveBudget, saveGender } from '@/lib/prefs';
@@ -651,6 +651,16 @@ export default function ChatPage() {
     setMessages(chat.messages);
   };
 
+  const removeChat = (id: string) => {
+    const next = deleteChat(chats, id);
+    setChats(next);
+    saveChats(next);
+    if (activeId === id) {
+      setActiveId(null);
+      setMessages([]);
+    }
+  };
+
   const activeTitle = useMemo(() => {
     if (!activeId) return t('chat.title.new', lang);
     return chats.find((c) => c.id === activeId)?.title ?? t('chat.title.new', lang);
@@ -663,6 +673,7 @@ export default function ChatPage() {
         activeId={activeId}
         onSelect={selectChat}
         onNew={newChat}
+        onDelete={removeChat}
         cartCount={cart.length}
         onOpenCart={() => setCartOpen(true)}
         lang={lang}
