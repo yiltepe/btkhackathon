@@ -6,9 +6,8 @@ import Thumbnail from './Thumbnail';
 import { Glyph } from './Icons';
 import { formatPrice } from '@/lib/format';
 import { t } from '@/lib/i18n';
+import { isTrusted } from '@/lib/retailers';
 import type { Lang, Product } from '@/lib/types';
-
-type Sort = 'price' | 'rating';
 
 function Row({
   r,
@@ -145,16 +144,18 @@ export default function LinksModal({
   lang: Lang;
   loading?: boolean;
 }) {
-  const [sort, setSort] = useState<Sort>('price');
+  const [showAll, setShowAll] = useState(false);
+
   const sorted = [...retailers].sort((a, b) => {
-    if (sort === 'price') {
-      if (a.price === null && b.price === null) return 0;
-      if (a.price === null) return 1;
-      if (b.price === null) return -1;
-      return a.price - b.price;
-    }
-    return 0;
+    if (a.price === null && b.price === null) return 0;
+    if (a.price === null) return 1;
+    if (b.price === null) return -1;
+    return a.price - b.price;
   });
+
+  const trusted = sorted.filter((r) => isTrusted(r.retailer, r.link));
+  const displayed = showAll || trusted.length === 0 ? sorted : trusted;
+  const hiddenCount = sorted.length - trusted.length;
 
   return (
     <Overlay onClose={onClose}>
@@ -221,32 +222,9 @@ export default function LinksModal({
           </button>
         </div>
 
-        <div style={{ padding: '10px 16px 0', display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ display: 'inline-flex', background: '#F4F1EA', borderRadius: 5, padding: 2 }}>
-            {(['price', 'rating'] as Sort[]).map((k) => (
-              <button
-                key={k}
-                onClick={() => setSort(k)}
-                style={{
-                  padding: '5px 11px',
-                  borderRadius: 4,
-                  fontSize: 11.5,
-                  fontWeight: 500,
-                  background: sort === k ? '#FFFFFF' : 'transparent',
-                  color: sort === k ? 'var(--ink)' : 'var(--muted)',
-                  boxShadow: sort === k ? '0 1px 2px rgba(0,0,0,.04)' : 'none',
-                  transition: 'all .12s',
-                }}
-              >
-                {k === 'price' ? t('modal.links.sortPrice', lang) : t('modal.links.sortRating', lang)}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div style={{ padding: '6px 10px', maxHeight: 360, overflowY: 'auto' }}>
-          {sorted.map((r, i) => (
-            <Row key={i} r={r} highlight={sort === 'price' && i === 0} onAdd={() => onAdd(r)} lang={lang} />
+          {displayed.map((r, i) => (
+            <Row key={r.link} r={r} highlight={i === 0} onAdd={() => onAdd(r)} lang={lang} />
           ))}
           {loading && (
             <div
@@ -282,9 +260,27 @@ export default function LinksModal({
             alignItems: 'center',
           }}
         >
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-            {retailers.length} · {t('modal.links.lastChecked', lang)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {displayed.length} · {t('modal.links.lastChecked', lang)}
+            </span>
+            {hiddenCount > 0 && (
+              <button
+                onClick={() => setShowAll((v) => !v)}
+                style={{
+                  fontSize: 12,
+                  color: 'var(--accent)',
+                  fontWeight: 500,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                {showAll ? t('modal.links.trustedOnly', lang) : `${t('modal.links.showAll', lang)} (+${hiddenCount})`}
+              </button>
+            )}
+          </div>
           <button
             onClick={onAddAll}
             style={{
