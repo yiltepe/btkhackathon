@@ -205,13 +205,14 @@ export default function VisualModal({
     <Overlay onClose={onClose}>
       <div
         style={{
-          width: 880,
-          maxWidth: '94vw',
+          width: 720,
+          maxWidth: '92vw',
+          maxHeight: '92vh',
+          overflowY: 'auto',
           background: 'var(--bg-soft)',
           border: '1px solid var(--line)',
           borderRadius: 6,
           boxShadow: 'var(--shadow-modal)',
-          overflow: 'hidden',
           position: 'relative',
         }}
       >
@@ -262,11 +263,11 @@ export default function VisualModal({
         <div
           style={{
             background: '#EFEAE0',
-            padding: '72px 60px 56px',
+            padding: '52px 40px 36px',
             display: 'grid',
             placeItems: 'center',
             borderBottom: '1px solid var(--line-soft)',
-            minHeight: 360,
+            minHeight: 240,
           }}
         >
           {image ? (
@@ -284,7 +285,7 @@ export default function VisualModal({
               }}
               style={{
                 maxWidth: '100%',
-                maxHeight: 480,
+                maxHeight: 340,
                 borderRadius: 4,
                 boxShadow: '0 12px 30px -20px rgba(60,40,20,.18)',
               }}
@@ -292,7 +293,7 @@ export default function VisualModal({
           ) : (
             <div
               style={{
-                width: isFashion ? 380 : 560,
+                width: isFashion ? 280 : 420,
                 maxWidth: '100%',
                 aspectRatio: isFashion ? '3/4' : '4/3',
                 background: '#FBF7EF',

@@ -52,18 +52,6 @@ export default function InputBar({
           position: 'relative',
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
-            padding: '8px 10px 4px',
-            borderBottom: '1px dashed var(--line-soft)',
-          }}
-        >
-          <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
-        </div>
-
         {pendingFilePreview && (
           <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,6 +150,7 @@ export default function InputBar({
             >
               <Glyph icon="paperclip" size={16} />
             </button>
+            <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
             <button
               title={t('chat.send', lang)}
               onClick={onSend}
