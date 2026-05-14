@@ -69,14 +69,14 @@ Bilingual (EN/TR) AI shopping assistant. Next.js 14 App Router · Tailwind · Ge
 - Cache cap: 8 entries; prune oldest by insertion time.
 
 ### Search & price extraction
-- Google CSE free quota is 100/day. Cache per request session.
-- **Prices come from `pagemap.offer.price` / `pagemap.product.price`** in the CSE response — do NOT scrape retailer pages, do NOT use SerpApi.
+- **Provider: Serper.dev** (Google CSE was retired). Free tier: 2,500 queries. Do NOT scrape retailer pages, do NOT use SerpApi.
 - `/api/search` pipeline:
-  1. Call CSE, request 10 results
-  2. For each item, read `pagemap.offer[0].price` (+ `pricecurrency`) or fall back to `pagemap.product[0].price`
-  3. Dedupe by retailer hostname (keep cheapest per retailer)
-  4. If fewer than 3 results have a price → pad from `/lib/mocks.ts`
-  5. Sort ascending by numeric price; return `Product[]`
+  1. Call `POST https://google.serper.dev/shopping` with `{ q, num: 10, gl, hl }` derived from UI language
+  2. Map each `shopping[]` item → `Product` (price parsed from string, currency detected from symbol)
+  3. If fewer than 3 priced results → also call `/search` and merge organic items
+  4. Dedupe by `source` (retailer), keeping the cheapest per retailer
+  5. Sort ascending by numeric price; if still <3 priced results, pad from `/lib/mocks.ts`
+- Price strings include locale formatting (e.g. `₺48.048,99`, `$1,299.00`) — parser handles both `,`/`.` decimal conventions via currency-aware fallback.
 - Items with no extractable price are shown but labeled "Visit for price" (no fake values).
 - Never show an empty product strip.
 
@@ -90,7 +90,7 @@ Bilingual (EN/TR) AI shopping assistant. Next.js 14 App Router · Tailwind · Ge
 Start `next dev` and verify in the browser. Type-check passing ≠ UI works. The `/design/*.html` files open standalone in a browser — diff against them visually.
 
 ## Environment variables
-Required: `GEMINI_API_KEY`, `GOOGLE_CUSTOM_SEARCH_API_KEY`, `GOOGLE_CUSTOM_SEARCH_ENGINE_ID`.
+Required: `GEMINI_API_KEY`, `SERPER_API_KEY`.
 If any are missing, route handlers return mocks — never 500.
 
 ## Commit conventions

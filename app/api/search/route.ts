@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cseSearch, hasSearch } from '@/lib/search';
+import { serperSearch, hasSearch } from '@/lib/search';
 import { mockProducts } from '@/lib/mocks';
 import type { Lang, Mode } from '@/lib/types';
 
@@ -17,12 +17,12 @@ export async function POST(req: NextRequest) {
   const { query, mode = 'price', language = 'en' } = body;
 
   if (!hasSearch()) {
-    console.warn('[api/search] CSE keys not set → mock products');
+    console.warn('[api/search] SERPER_API_KEY not set → mock products');
     return NextResponse.json({ products: mockProducts(mode, language) });
   }
 
   try {
-    let products = await cseSearch(query, language);
+    let products = await serperSearch(query, language);
     const priced = products.filter((p) => p.price !== null);
     if (priced.length < 3) {
       const padding = mockProducts(mode, language).filter(
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ products });
   } catch (err) {
-    console.error('[api/search] CSE error → falling back to mock:', err);
+    console.error('[api/search] Serper error → falling back to mock:', err);
     return NextResponse.json({ products: mockProducts(mode, language) });
   }
 }
