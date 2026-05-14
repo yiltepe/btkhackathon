@@ -15,6 +15,7 @@ import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove 
 import { loadChats, saveChats, makeChat, upsertChat, deleteChat } from '@/lib/chats';
 import { compressImage, isUrl } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
+import { isTrusted } from '@/lib/retailers';
 import { defaultBudget, loadBudget, loadGender, saveBudget, saveGender } from '@/lib/prefs';
 import type {
   Budget,
@@ -467,7 +468,8 @@ export default function ChatPage() {
         const usedRetailers = new Set<string>();
         products = results
           .map((items, i) => {
-            let chosen = items.find((it) => !usedRetailers.has(it.retailer));
+            let chosen = items.find((it) => !usedRetailers.has(it.retailer) && isTrusted(it.retailer, it.link));
+            if (!chosen) chosen = items.find((it) => !usedRetailers.has(it.retailer));
             if (!chosen) chosen = items[i % items.length];
             if (!chosen) chosen = items[0];
             if (!chosen) return null;
