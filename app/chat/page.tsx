@@ -230,34 +230,45 @@ function TypingDots({ label }: { label: string }) {
   return (
     <div className="oben-msg-in" style={{ padding: '18px 0' }}>
       <div
+        key={label}
         style={{
-          fontSize: 11,
-          color: 'var(--muted)',
-          textTransform: 'uppercase',
-          letterSpacing: '.12em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 14,
+          color: 'var(--ink)',
           fontWeight: 500,
-          marginBottom: 10,
+          letterSpacing: '-0.005em',
+          animation: 'oben-status-in 220ms ease-out',
         }}
       >
         <span
           style={{
             display: 'inline-block',
-            width: 5,
-            height: 5,
+            width: 7,
+            height: 7,
             borderRadius: '50%',
             background: 'var(--accent)',
-            marginRight: 8,
-            verticalAlign: 'middle',
-            transform: 'translateY(-1px)',
+            animation: 'oben-pulse 1.2s ease-in-out infinite',
           }}
         />
-        {label}
+        <span>{label}</span>
+        <span className="oben-typing" aria-label={label} style={{ marginLeft: 2 }}>
+          <span />
+          <span />
+          <span />
+        </span>
       </div>
-      <div className="oben-typing" aria-label={label}>
-        <span />
-        <span />
-        <span />
-      </div>
+      <style jsx>{`
+        @keyframes oben-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.35; transform: scale(0.85); }
+        }
+        @keyframes oben-status-in {
+          from { opacity: 0; transform: translateY(2px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
@@ -271,14 +282,19 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [pending, setPending] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
   const [linksOpen, setLinksOpen] = useState<{ products: Product[]; name: string } | null>(null);
   const [visualOpen, setVisualOpen] = useState<{
+    msgId: string;
     kind: 'fashion' | 'home';
     description: string;
     items: Product[];
     imagePrompt?: string;
+    pieces?: { description: string }[];
+    anchor?: { imageBase64: string; mimeType: string; type?: string };
   } | null>(null);
+  const [imageMemo, setImageMemo] = useState<Record<string, string>>({});
   const [cartOpen, setCartOpen] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [gender, setGender] = useState<Gender | null>(null);
@@ -435,10 +451,18 @@ export default function ChatPage() {
     let products: Product[] = response.retailers ?? [];
     if (hasShoppingIntent && products.length === 0) {
       if ((resolvedMode === 'fashion' || resolvedMode === 'home') && response.suggestions?.length) {
-        // One search per suggested piece; pick the cheapest match per query
+        // One search per suggested piece; pick the cheapest match per query.
+        // Prefer a color-qualified query so retailer thumbnails match the generated visual.
         const queries = response.suggestions.slice(0, 6);
+        setStatus(`${t('chat.status.searching', lang)} (${queries.length})`);
         const results = await Promise.all(
-          queries.map((s) => fetchProducts(s.searchQuery || s.name, resolvedMode)),
+          queries.map((s) => {
+            const base = s.searchQuery || s.name;
+            const q = s.color && !base.toLowerCase().includes(s.color.toLowerCase())
+              ? `${s.color} ${base}`
+              : base;
+            return fetchProducts(q, resolvedMode);
+          }),
         );
         const usedRetailers = new Set<string>();
         products = results
@@ -456,7 +480,10 @@ export default function ChatPage() {
           response.identifiedItem?.name ||
           response.suggestions?.[0]?.searchQuery ||
           '';
-        if (query) products = await fetchProducts(query, resolvedMode);
+        if (query) {
+          setStatus(`${t('chat.status.searchingQuery', lang).replace('{q}', query.slice(0, 60))}`);
+          products = await fetchProducts(query, resolvedMode);
+        }
       }
 
       if (products.length === 0) {
@@ -499,6 +526,7 @@ export default function ChatPage() {
       const base = [...messages, userMsg];
       setMessages(base);
       setPending(true);
+      setStatus(t('chat.status.analyzingImage', lang));
       try {
         const res = await fetch('/api/analyze', {
           method: 'POST',
@@ -506,10 +534,13 @@ export default function ChatPage() {
           body: JSON.stringify({ imageBase64: file.base64, mimeType: file.mimeType, mode, language: lang, message: text || undefined, gender, budget }),
         });
         const data = (await res.json()) as StandardResponse;
-        setPending(false);
+        setStatus(t('chat.status.thinking', lang));
         await handleResponse(data, base);
       } catch {
+        /* ignore */
+      } finally {
         setPending(false);
+        setStatus(null);
       }
       return;
     }
@@ -520,6 +551,7 @@ export default function ChatPage() {
     if (isUrl(text)) {
       attachment = { kind: 'link', label: text };
       setResolving(true);
+      setStatus(t('chat.status.resolving', lang));
       try {
         const res = await fetch('/api/resolve', {
           method: 'POST',
@@ -531,10 +563,14 @@ export default function ChatPage() {
             title?: string;
             image?: string;
             jsonLd?: Record<string, unknown>;
+            fallback?: boolean;
             error?: string;
           };
           if (!data.error && data.title) {
             resolvedProduct = { title: data.title, image: data.image, jsonLd: data.jsonLd };
+            if (data.fallback) {
+              setStatus(t('chat.status.resolvingFallback', lang));
+            }
           }
         }
       } catch { /* ignore */ }
@@ -550,11 +586,17 @@ export default function ChatPage() {
     const base = [...messages, userMsg];
     setMessages(base);
     setPending(true);
+    setStatus(t('chat.status.thinking', lang));
 
     const response = await callChat(text, resolvedProduct);
-    setPending(false);
-    if (!response) return;
+    if (!response) {
+      setPending(false);
+      setStatus(null);
+      return;
+    }
     await handleResponse(response, base);
+    setPending(false);
+    setStatus(null);
   };
 
   const onAttach = async (file: File) => {
@@ -713,14 +755,35 @@ export default function ChatPage() {
                         items={msg.products ?? []}
                         onAdd={addProductToCart}
                         onCompare={(p) => compareProduct(p, msg.kind as Mode)}
-                        onOpenModal={() =>
+                        onOpenModal={() => {
+                          const msgIdx = messages.findIndex((mm) => mm.id === msg.id);
+                          let anchor: { imageBase64: string; mimeType: string; type?: string } | undefined;
+                          for (let i = msgIdx - 1; i >= 0; i--) {
+                            const m = messages[i];
+                            if (m.role !== 'user' || m.attachment?.kind !== 'image' || !m.attachment.preview) continue;
+                            const match = m.attachment.preview.match(/^data:([^;]+);base64,(.+)$/);
+                            if (match) {
+                              anchor = {
+                                mimeType: match[1],
+                                imageBase64: match[2],
+                                type: msg.response?.identifiedItem?.type || msg.response?.identifiedItem?.name,
+                              };
+                            }
+                            break;
+                          }
+                          const pieces = msg.response?.suggestions
+                            ?.map((s) => ({ description: s.visualDescription || s.name }))
+                            .filter((p) => !!p.description);
                           setVisualOpen({
+                            msgId: msg.id,
                             kind: msg.kind as 'fashion' | 'home',
                             description: msg.text,
                             items: msg.products ?? [],
                             imagePrompt: msg.response?.imagePrompt,
-                          })
-                        }
+                            pieces,
+                            anchor,
+                          });
+                        }}
                         lang={lang}
                       />
                     ) : null}
@@ -798,8 +861,8 @@ export default function ChatPage() {
                   </AIMsg>
                 ),
               )}
-              {pending && <TypingDots label={t('chat.typing', lang)} />}
-              {resolving && !pending && <TypingDots label={t('chat.fetchingProduct', lang)} />}
+              {pending && <TypingDots label={status || t('chat.typing', lang)} />}
+              {resolving && !pending && <TypingDots label={status || t('chat.fetchingProduct', lang)} />}
             </div>
           )}
         </section>
@@ -833,10 +896,17 @@ export default function ChatPage() {
 
       {visualOpen && (
         <VisualModal
+          key={visualOpen.msgId}
           kind={visualOpen.kind}
           description={visualOpen.description}
           items={visualOpen.items}
           imagePrompt={visualOpen.imagePrompt}
+          pieces={visualOpen.pieces}
+          anchor={visualOpen.anchor}
+          initialImage={imageMemo[visualOpen.msgId]}
+          onGenerated={(b64) =>
+            setImageMemo((prev) => ({ ...prev, [visualOpen.msgId]: b64 }))
+          }
           onClose={() => setVisualOpen(null)}
           onAdd={addProductToCart}
           lang={lang}

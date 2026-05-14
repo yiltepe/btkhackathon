@@ -48,6 +48,16 @@ export async function POST(req: NextRequest) {
     const parts = [preamble, basePrompt, message ? `User request: ${message}` : ''].filter(Boolean);
     const promptText = parts.join('\n\n');
 
+    console.log('\n========== [api/analyze] GEMINI REQUEST ==========');
+    console.log('Model:', GEMINI_TEXT_MODEL, '| mode:', mode, '| lang:', language);
+    console.log('--- System Instruction ---');
+    console.log(PROMPTS[mode][language]);
+    console.log('--- Image ---');
+    console.log(`mimeType: ${mimeType || 'image/jpeg'} | base64 length: ${imageBase64?.length ?? 0}`);
+    console.log('--- Prompt Text ---');
+    console.log(promptText);
+    console.log('==================================================\n');
+
     const result = await model.generateContent([
       {
         inlineData: { data: imageBase64, mimeType: mimeType || 'image/jpeg' },
@@ -55,6 +65,16 @@ export async function POST(req: NextRequest) {
       { text: promptText },
     ]);
     const text = result.response.text();
+    const usage = result.response.usageMetadata;
+    console.log('========== [api/analyze] GEMINI RESPONSE ==========');
+    if (usage) {
+      console.log(`Tokens → prompt: ${usage.promptTokenCount} | output: ${usage.candidatesTokenCount} | total: ${usage.totalTokenCount}`);
+    } else {
+      console.log('Tokens → (no usageMetadata returned)');
+    }
+    console.log('--- Response Text ---');
+    console.log(text);
+    console.log('===================================================\n');
     const parsed = JSON.parse(text);
     return NextResponse.json(parsed);
   } catch {

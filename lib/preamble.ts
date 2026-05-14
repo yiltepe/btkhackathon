@@ -23,22 +23,28 @@ export function buildContextPreamble(gender: Gender | null, budget: Budget | nul
     lines.push(`User budget per item: ${budgetLine(budget)}. Stay within this range when suggesting products and search queries; if the requested item cannot reasonably fit, mention it briefly.`);
   }
   lines.push(
-    'CLARIFY RULE: If the user request is too vague to give a useful answer (e.g. "find me shorts", "I need shoes", "a nice bag"), DO NOT generate suggestions, identifiedItem, or imagePrompt yet. Instead respond with a brief friendly `text` (in the user\'s language) and populate `clarify` with multiple `groups`, each `{ question, options[] }`. Ask the relevant dimensions ALL AT ONCE:',
+    'CLARIFY RULE: Only ask clarifying questions when the request is genuinely too vague to act on (e.g. "find me shorts", "I need shoes"). When you do clarify, DO NOT generate suggestions, identifiedItem, or imagePrompt yet — respond with a brief friendly `text` (in the user\'s language) and populate `clarify.groups`, each `{ question, options[] }`. Pick ONLY the dimensions that actually matter for the specific item, and skip any dimension the user has already specified.',
   );
   lines.push(
-    '- Always include a COLOR group (3–6 common colors in the user\'s language).',
+    'DIMENSION SELECTION (be selective — most items need 1–2 groups, never more than 3):',
   );
   lines.push(
-    '- For clothing (shirts, pants, jackets, dresses, shorts, etc.) include a BODY SIZE group with options like XS, S, M, L, XL, XXL (or numeric sizes if more natural).',
+    '- COLOR: only when the item has many obvious color choices AND the user gave no color/style hint. Do NOT ask color for items where color is rarely the deciding factor (watches, electronics, fragrances, books, basic white tees, etc.). Never ask color reflexively — skip it by default.',
   );
   lines.push(
-    '- For shoes include a SHOE SIZE group (EU sizes 36–46, or whatever fits the user locale).',
+    '- BODY SIZE (XS–XXL or numeric) only for body-fitted clothing: shirts, t-shirts, pants, jeans, jackets, coats, dresses, skirts, shorts, suits. Do NOT ask size for accessories, bags, hats, scarves, jewelry, sunglasses, swimwear bottoms ambiguously, etc.',
   );
   lines.push(
-    '- For any item include a STYLE / USE-CASE group (3–5 options like "casual", "sport", "formal", "beach", etc., translated).',
+    '- SHOE SIZE only for shoes/boots/sneakers.',
   );
   lines.push(
-    'ALWAYS set `clarify.allowOther: true` so the UI shows a free-text option for anything not in the chips. Keep each option short (1–3 words). Do NOT populate clarify when the user already specified the missing dimensions, or when a product link/image is provided, or for greetings/off-topic.',
+    '- STYLE / USE-CASE only when occasion materially changes the recommendation (e.g. "shoes" → casual/sport/formal; "dress" → daytime/evening/wedding). Skip for items where style is implied.',
+  );
+  lines.push(
+    '- For furniture/home items, ask ROOM or DIMENSION instead of color/size when relevant.',
+  );
+  lines.push(
+    'Always set `clarify.allowOther: true`. Keep each option short (1–3 words). Do NOT populate clarify when the user already specified the missing dimensions, or when a product link/image is provided, or for greetings/off-topic, or when sensible defaults exist (just proceed).',
   );
   return lines.join(' ');
 }

@@ -123,6 +123,21 @@ export default function InputBar({
                 onSend();
               }
             }}
+            onPaste={(e) => {
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (let i = 0; i < items.length; i++) {
+                const it = items[i];
+                if (it.kind === 'file' && it.type.startsWith('image/')) {
+                  const file = it.getAsFile();
+                  if (file) {
+                    e.preventDefault();
+                    onAttach(file);
+                    return;
+                  }
+                }
+              }
+            }}
             rows={1}
             style={{
               flex: 1,

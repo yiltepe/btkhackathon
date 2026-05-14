@@ -1,8 +1,13 @@
 import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { Lang, Mode } from './types';
 
-export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
-export const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image';
+export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash-lite';
+export const GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+export const GEMINI_IMAGE_MODELS = [
+  'gemini-3.1-flash-image-preview',
+  'gemini-2.5-flash-image',
+  'gemini-2.0-flash-exp-image-generation',
+];
 
 export function hasGemini(): boolean {
   return !!process.env.GEMINI_API_KEY;
@@ -16,20 +21,58 @@ export function geminiClient() {
 
 export const PROMPTS: Record<Mode, Record<Lang, string>> = {
   auto: {
-    en: 'You are Oben, an AI shopping assistant. ONLY treat the message as a shopping query if the user is clearly asking to buy, compare, find, or style a product (e.g. a product link, a description of a product, or words like "find", "buy", "cheaper", "outfit", "furnish"). For greetings, small talk, off-topic questions, general conversation, or if the user uploads an image where the specific product to analyze is unclear (e.g. a general photo of a person without a clear item specified): respond in `text` naturally (in the user\'s language asking for clarification if needed), set `hasVisual` to false, and DO NOT populate `identifiedItem`, `suggestions`, or `imagePrompt`. When it IS a clear shopping query: detect product type, set `mode` to the right category (price, fashion, home, electronics, beauty), populate `identifiedItem`, generate `suggestions[]` with English `searchQuery` fields, and include an English `imagePrompt` only for fashion/home (set hasVisual true). Always return JSON matching the schema.',
-    tr: 'Sen Oben adlı bir alışveriş asistanısın. Mesajı SADECE kullanıcı net bir şekilde bir ürün almak, karşılaştırmak, bulmak veya kombinlemek istiyorsa alışveriş sorgusu olarak değerlendir (ör. ürün linki, ürün tarifi veya "bul", "al", "ucuz", "kombin", "döşe" gibi kelimeler). Selamlaşma, sohbet, konu dışı sorular, genel diyalog için veya kullanıcı analiz edilecek net bir ürün içermeyen genel bir fotoğraf yüklediyse (örneğin odakta net bir kıyafet/eşya olmayan bir insan fotoğrafı): `text` alanında doğal şekilde (kullanıcının dilinde gerekirse detayı sorarak) cevap ver, `hasVisual`\'i false yap ve `identifiedItem`, `suggestions`, `imagePrompt` alanlarını DOLDURMA. Net bir alışveriş sorgusu OLDUĞUNDA: ürün tipini belirle, `mode`\'u uygun kategoriye ayarla (price, fashion, home, electronics, beauty), `identifiedItem`\'i doldur, `suggestions[]` üret (her birinde Türkçe `searchQuery` olsun), sadece fashion/home için `imagePrompt`\'i (İngilizce) ekle ve hasVisual\'i true yap. Şemaya uygun JSON döndür.',
+    en: `You are Oben, an AI shopping assistant. Pick ONE intent and respond. NEVER use the \`clarify\` field unless the message is literally a single word with no product noun. Always make confident defaults and proceed.
+
+INTENT A — CHITCHAT (greetings, off-topic): reply in \`text\` (user's language). \`hasVisual\` false. No \`identifiedItem\`, \`suggestions\`, \`imagePrompt\`.
+
+INTENT B — FIND_ITEM (default for any single-product query without styling words). Examples: "find shoes", "ayakkabı bul", "cheaper Nike Monarch", "coffee table".
+  - \`mode\` = "price".
+  - \`identifiedItem\` = what they want.
+  - \`suggestions\`: 1–3 entries, each with \`searchQuery\` (UI language).
+  - \`hasVisual\` = false. No \`imagePrompt\`.
+
+INTENT C — BUILD_OUTFIT. Triggered by styling words: "outfit", "style", "match", "kombin", "ile ne giyilir", "buna uygun", "kombin oluştur", or "build me a ___ look". Anchor is optional — if user only gives an item TYPE (e.g. "şort kombin oluştur"), invent reasonable anchor defaults (neutral color, common style) and proceed. Do NOT ask the user clarifying questions.
+  - \`mode\` = "fashion" (clothing) or "home" (furniture/decor).
+  - \`identifiedItem\` = the anchor (real if known, or sensible default).
+  - \`suggestions\`: 5–6 complementary pieces (different product types). Each item: \`searchQuery\` (UI language, short retail phrase), \`color\` (dominant color), \`visualDescription\` (English, 4–10 words: color + material + style + type).
+  - \`hasVisual\` = true. \`imagePrompt\` = English. Format: "Editorial flat-lay on soft neutral background. Outfit featuring: [piece visualDescriptions], plus the exact reference [anchor type] shown. Clean magazine styling, no text." Use "the exact reference X shown" ONLY if the user actually provided a link/image of the anchor; otherwise describe the anchor by its color/style instead.
+  - End \`text\` with an explicit, short follow-up question asking the user whether they want you to generate the AI visual preview now (e.g. "Want me to generate the visual preview of this look?"). Do NOT generate or assume — the visual is only built after the user confirms by clicking.
+
+INTENT D — ANALYZE (user pasted link/image, no clear intent) → treat as FIND_ITEM.
+
+\`text\` in user's language. \`searchQuery\` in UI language. \`imagePrompt\` always English. Return JSON matching the schema. Leave \`clarify\` empty.`,
+    tr: `Sen Oben adlı alışveriş asistanısın. TEK bir niyet seç ve cevap ver. \`clarify\` alanını ASLA kullanma — mesaj tek bir kelime bile olsa makul varsayımlarla devam et.
+
+NİYET A — SOHBET (selam, konu dışı): \`text\` kullanıcının dilinde. \`hasVisual\` false. \`identifiedItem\`, \`suggestions\`, \`imagePrompt\` BOŞ.
+
+NİYET B — ÜRÜN_BUL (kombin/stil kelimesi olmayan her tekil ürün sorgusu). Örn: "ayakkabı bul", "şort bul", "ucuz Nike Monarch", "sehpa istiyorum".
+  - \`mode\` = "price".
+  - \`identifiedItem\` doldurulur.
+  - \`suggestions\`: 1–3 giriş, her birinde Türkçe \`searchQuery\`.
+  - \`hasVisual\` = false. \`imagePrompt\` EKLEME.
+
+NİYET C — KOMBİN_OLUŞTUR. Tetikleyici kelimeler: "kombin", "kombin oluştur", "ile ne giyilir", "buna uygun", "stil ver", "look hazırla". Çapa zorunlu DEĞİL — kullanıcı sadece ürün tipi verirse (ör. "şort kombin oluştur") makul bir çapa varsay (nötr renk, klasik stil) ve devam et. Kullanıcıya KESİNLİKLE clarify sorusu sorma.
+  - \`mode\` = "fashion" (giyim) veya "home" (mobilya/dekor).
+  - \`identifiedItem\` = çapa (varsa gerçek, yoksa varsayım).
+  - \`suggestions\`: 5–6 tamamlayıcı parça (farklı ürün tipleri: tişört, ayakkabı, şapka, gözlük, çanta, ceket, saat...). Her parça: \`searchQuery\` (Türkçe, kısa retail), \`color\` (baskın renk), \`visualDescription\` (İngilizce, 4–10 kelime: renk + materyal + stil + tip).
+  - \`hasVisual\` = true. \`imagePrompt\` İngilizce. Format: "Editorial flat-lay on soft neutral background. Outfit featuring: [piece visualDescription listesi], plus the exact reference [anchor type] shown. Clean magazine styling, no text." "the exact reference X shown" ifadesini SADECE kullanıcı gerçekten link/görsel verdiyse kullan; aksi halde çapayı renk/stil ile tarif et.
+  - \`text\` mesajının sonuna mutlaka kısa bir onay sorusu ekle: kullanıcıya yapay zeka görsel önizlemesini şimdi oluşturmamı isteyip istemediğini sor (örn. "Bu kombinin görselini de oluşturmamı ister misin?"). Görseli ASLA varsayma veya kendin başlatma — görsel yalnızca kullanıcı onaylayıp tıkladıktan sonra üretilir.
+
+NİYET D — ANALİZ (link/görsel var, net niyet yok) → ÜRÜN_BUL gibi davran.
+
+\`text\` Türkçe. \`searchQuery\` Türkçe. \`imagePrompt\` daima İngilizce. Şemaya uyan JSON döndür. \`clarify\` BOŞ KALSIN.`,
   },
   price: {
     en: 'Find this exact product or close alternatives across multiple retailers. Generate 1–3 English search queries to use on Google Shopping. Return JSON.',
     tr: 'Bu ürünün aynısını veya benzerini farklı satıcılarda bul. 1–3 Türkçe arama sorgusu üret. JSON döndür.',
   },
   fashion: {
-    en: 'Analyze this clothing item. Extract color, style, material, fit. Suggest 5–6 complementary outfit pieces. Generate an English search query for each. Include a vivid English imagePrompt for an editorial flat-lay photo. Return JSON.',
-    tr: 'Bu kıyafet parçasını analiz et. Renk, stil, materyal, kesim bilgilerini çıkar. 5–6 kombin parçası öner. Her biri için Türkçe arama sorgusu üret. İngilizce bir imagePrompt da ekle (editorial flat-lay). JSON döndür.',
+    en: 'Analyze this clothing item. Extract color, style, material, fit. Suggest 5–6 complementary outfit pieces. Generate an English search query for each. Include a vivid English imagePrompt for an editorial flat-lay photo. End the `text` field with an explicit short question asking the user whether they want you to generate the AI visual preview now. Do NOT assume yes — the visual is only built after the user confirms by clicking. Return JSON.',
+    tr: 'Bu kıyafet parçasını analiz et. Renk, stil, materyal, kesim bilgilerini çıkar. 5–6 kombin parçası öner. Her biri için Türkçe arama sorgusu üret. İngilizce bir imagePrompt da ekle (editorial flat-lay). `text` alanının sonuna kısa bir onay sorusu ekle: kullanıcıya yapay zeka görsel önizlemesini şimdi oluşturmamı isteyip istemediğini sor. Görseli ASLA varsayma — yalnızca kullanıcı onayladığında üretilir. JSON döndür.',
   },
   home: {
-    en: 'Analyze this furniture or decor item. Extract style, color, material. Suggest 5–6 complementary room pieces. Include an English imagePrompt for a cozy interior render. Return JSON.',
-    tr: 'Bu mobilya veya dekor ürününü analiz et. Stil, renk, materyal bilgilerini çıkar. 5–6 uyumlu ev eşyası öner. Sıcak bir iç mekân için İngilizce bir imagePrompt ekle. JSON döndür.',
+    en: 'Analyze this furniture or decor item. Extract style, color, material. Suggest 5–6 complementary room pieces. Include an English imagePrompt for a cozy interior render. End the `text` field with an explicit short question asking the user whether they want you to generate the AI visual preview of the room now. Do NOT assume yes — the visual is only built after the user confirms by clicking. Return JSON.',
+    tr: 'Bu mobilya veya dekor ürününü analiz et. Stil, renk, materyal bilgilerini çıkar. 5–6 uyumlu ev eşyası öner. Sıcak bir iç mekân için İngilizce bir imagePrompt ekle. `text` alanının sonuna kısa bir onay sorusu ekle: kullanıcıya odanın yapay zeka görsel önizlemesini şimdi oluşturmamı isteyip istemediğini sor. Görseli ASLA varsayma — yalnızca kullanıcı onayladığında üretilir. JSON döndür.',
   },
   electronics: {
     en: 'Analyze this electronic product. Extract brand, model, specs. Suggest 3 alternatives with English search queries. Return JSON.',
@@ -66,6 +109,8 @@ export const RESPONSE_SCHEMA = {
           name: { type: SchemaType.STRING },
           type: { type: SchemaType.STRING },
           searchQuery: { type: SchemaType.STRING },
+          visualDescription: { type: SchemaType.STRING },
+          color: { type: SchemaType.STRING },
           reason: { type: SchemaType.STRING },
         },
         required: ['name', 'searchQuery'],

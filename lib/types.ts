@@ -26,6 +26,8 @@ export type Suggestion = {
   name: string;
   type?: string;
   searchQuery: string;
+  visualDescription?: string;
+  color?: string;
   reason?: string;
 };
 

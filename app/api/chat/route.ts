@@ -57,6 +57,18 @@ export async function POST(req: NextRequest) {
     const userParts: string[] = [];
     const preamble = buildContextPreamble(gender, budget, language);
     if (preamble) userParts.push(preamble);
+
+    const lastAi = [...chatHistory].reverse().find((m) => m.role === 'ai');
+    const priorClarify = lastAi?.response?.clarify;
+    if (priorClarify?.groups?.length) {
+      const summary = priorClarify.groups
+        .map((g) => `- ${g.question} (options: ${g.options.join(', ')})`)
+        .join('\n');
+      userParts.push(
+        `IMPORTANT FOLLOW-UP RULE: In your previous turn you asked these clarifying questions:\n${summary}\nThe user's current message contains their answers to those questions. Do NOT ask any clarifying questions again. Leave \`clarify\` empty/absent. Produce a FIND_ITEM or BUILD_OUTFIT response now and bake the user's answers into \`identifiedItem\` (color/type/style/material) and into each \`suggestions[].searchQuery\` (in UI language) so retailer search returns matching results.`,
+      );
+    }
+
     const urlMatch = message.match(/https?:\/\/\S+/);
     if (resolvedProduct) {
       userParts.push(`The user pasted a product link. Here is the resolved product data:\nTitle: ${resolvedProduct.title}`);
@@ -69,10 +81,39 @@ export async function POST(req: NextRequest) {
     userParts.push(`User message: ${message}`);
 
     const chat = model.startChat({ history });
-    const result = await chat.sendMessage(userParts.join('\n\n'));
+    const userMessage = userParts.join('\n\n');
+
+    console.log('\n========== [api/chat] GEMINI REQUEST ==========');
+    console.log('Model:', GEMINI_TEXT_MODEL, '| mode:', mode, '| lang:', language);
+    console.log('--- System Instruction ---');
+    console.log(PROMPTS[mode][language]);
+    console.log('--- History (', history.length, 'turns ) ---');
+    history.forEach((h, i) => console.log(`[${i}] ${h.role}: ${h.parts[0].text.slice(0, 300)}${h.parts[0].text.length > 300 ? '…' : ''}`));
+    console.log('--- User Message ---');
+    console.log(userMessage);
+    console.log('================================================\n');
+
+    const result = await chat.sendMessage(userMessage);
     const text = result.response.text();
-    const parsed = JSON.parse(text);
-    return NextResponse.json(parsed);
+    const usage = result.response.usageMetadata;
+    console.log('========== [api/chat] GEMINI RESPONSE ==========');
+    if (usage) {
+      console.log(`Tokens → prompt: ${usage.promptTokenCount} | output: ${usage.candidatesTokenCount} | total: ${usage.totalTokenCount}`);
+    } else {
+      console.log('Tokens → (no usageMetadata returned)');
+    }
+    console.log('--- Response Text ---');
+    console.log(text);
+    console.log('================================================\n');
+
+    try {
+      const parsed = JSON.parse(text);
+      return NextResponse.json(parsed);
+    } catch (parseErr) {
+      console.error('[api/chat] JSON parse failed; raw text was:\n', text);
+      console.error('[api/chat] parse error:', parseErr);
+      return NextResponse.json(mockResponse(mode, language, message));
+    }
   } catch (err) {
     console.error('[api/chat] Gemini error → falling back to mock:', err);
     return NextResponse.json(mockResponse(mode, language, message));
