@@ -434,14 +434,16 @@ export default function ChatPage() {
     }
   };
 
-  const handleResponse = async (response: StandardResponse, baseMessages: Message[]) => {
-    let resolvedMode = response.mode;
-    if (resolvedMode === 'auto') {
+  const handleResponse = async (response: StandardResponse, baseMessages: Message[], forceShoppingIntent = false) => {
+    const VALID_MODES: Mode[] = ['price', 'fashion', 'home', 'electronics', 'beauty'];
+    let resolvedMode: Mode = response.mode as Mode;
+    if (!VALID_MODES.includes(resolvedMode)) {
       resolvedMode = inferMode(response.text);
     }
     const needsClarification = !!(response.clarify?.groups?.length);
     const hasShoppingIntent =
       !needsClarification && (
+        forceShoppingIntent ||
         !!response.identifiedItem ||
         (response.suggestions?.length ?? 0) > 0 ||
         (response.retailers?.length ?? 0) > 0 ||
@@ -537,7 +539,7 @@ export default function ChatPage() {
         });
         const data = (await res.json()) as StandardResponse;
         setStatus(t('chat.status.thinking', lang));
-        await handleResponse(data, base);
+        await handleResponse(data, base, true);
       } catch {
         /* ignore */
       } finally {
@@ -597,7 +599,7 @@ export default function ChatPage() {
       setStatus(null);
       return;
     }
-    await handleResponse(response, base);
+    await handleResponse(response, base, !!detectedUrl);
     setPending(false);
     setStatus(null);
   };
