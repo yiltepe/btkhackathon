@@ -284,7 +284,7 @@ export default function ChatPage() {
   const [resolving, setResolving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [pendingFile, setPendingFile] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
-  const [linksOpen, setLinksOpen] = useState<{ products: Product[]; name: string } | null>(null);
+  const [linksOpen, setLinksOpen] = useState<{ products: Product[]; name: string; loading?: boolean } | null>(null);
   const [visualOpen, setVisualOpen] = useState<{
     msgId: string;
     kind: 'fashion' | 'home';
@@ -323,7 +323,7 @@ export default function ChatPage() {
   };
 
   const compareProduct = async (p: Product, m: Mode) => {
-    setLinksOpen({ products: [p], name: p.name });
+    setLinksOpen({ products: [p], name: p.name, loading: true });
     const more = await fetchProducts(p.name, m);
     const seen = new Set<string>([p.retailer.toLowerCase()]);
     const merged = [p, ...more.filter((x) => {
@@ -338,7 +338,7 @@ export default function ChatPage() {
       if (b.price === null) return -1;
       return a.price - b.price;
     });
-    setLinksOpen({ products: merged, name: p.name });
+    setLinksOpen({ products: merged, name: p.name, loading: false });
   };
 
   const appendToInput = (chip: string) => {
@@ -902,6 +902,7 @@ export default function ChatPage() {
           onAdd={addProductToCart}
           onAddAll={() => linksOpen.products.forEach(addProductToCart)}
           lang={lang}
+          loading={linksOpen.loading}
         />
       )}
 

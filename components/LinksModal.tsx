@@ -135,6 +135,7 @@ export default function LinksModal({
   onAdd,
   onAddAll,
   lang,
+  loading = false,
 }: {
   productName: string;
   retailers: Product[];
@@ -142,6 +143,7 @@ export default function LinksModal({
   onAdd: (r: Product) => void;
   onAddAll: () => void;
   lang: Lang;
+  loading?: boolean;
 }) {
   const [sort, setSort] = useState<Sort>('price');
   const sorted = [...retailers].sort((a, b) => {
@@ -246,6 +248,29 @@ export default function LinksModal({
           {sorted.map((r, i) => (
             <Row key={i} r={r} highlight={sort === 'price' && i === 0} onAdd={() => onAdd(r)} lang={lang} />
           ))}
+          {loading && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                fontSize: 12.5,
+                color: 'var(--muted)',
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: 'var(--accent)',
+                  animation: 'oben-pulse 1.2s ease-in-out infinite',
+                }}
+              />
+              {t('modal.links.fetching', lang)}
+            </div>
+          )}
         </div>
 
         <div
