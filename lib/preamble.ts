@@ -6,11 +6,11 @@ const GENDER_LABEL: Record<Gender, { en: string; tr: string }> = {
   unisex: { en: 'unisex items', tr: 'unisex ürünler' },
 };
 
-function budgetLine(b: Budget): string {
+function budgetLine(b: Budget, lang: Lang): string {
   const cur = b.currency;
   if (b.min !== null && b.max !== null) return `${b.min}–${b.max} ${cur}`;
-  if (b.max !== null) return `up to ${b.max} ${cur}`;
-  if (b.min !== null) return `at least ${b.min} ${cur}`;
+  if (b.max !== null) return lang === 'tr' ? `en fazla ${b.max} ${cur}` : `up to ${b.max} ${cur}`;
+  if (b.min !== null) return lang === 'tr' ? `en az ${b.min} ${cur}` : `at least ${b.min} ${cur}`;
   return '';
 }
 
@@ -20,7 +20,7 @@ export function buildContextPreamble(gender: Gender | null, budget: Budget | nul
     lines.push(`User shops for: ${GENDER_LABEL[gender][lang]}.`);
   }
   if (budget && (budget.min !== null || budget.max !== null)) {
-    lines.push(`User budget per item: ${budgetLine(budget)}. Stay within this range when suggesting products and search queries; if the requested item cannot reasonably fit, mention it briefly.`);
+    lines.push(`User budget per item: ${budgetLine(budget, lang)}. Stay within this range when suggesting products and search queries; if the requested item cannot reasonably fit, mention it briefly.`);
   }
   lines.push(
     'CLARIFY RULE: Only ask clarifying questions when the request is genuinely too vague to act on (e.g. "find me shorts", "I need shoes"). When you do clarify, DO NOT generate suggestions, identifiedItem, or imagePrompt yet — respond with a brief friendly `text` (in the user\'s language) and populate `clarify.groups`, each `{ question, options[] }`. Pick ONLY the dimensions that actually matter for the specific item, and skip any dimension the user has already specified.',
@@ -46,5 +46,5 @@ export function buildContextPreamble(gender: Gender | null, budget: Budget | nul
   lines.push(
     'Always set `clarify.allowOther: true`. Keep each option short (1–3 words). Do NOT populate clarify when the user already specified the missing dimensions, or when a product link/image is provided, or for greetings/off-topic, or when sensible defaults exist (just proceed).',
   );
-  return lines.join(' ');
+  return lines.join('\n');
 }
