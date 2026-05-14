@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geminiClient, GEMINI_TEXT_MODEL, PROMPTS, RESPONSE_SCHEMA } from '@/lib/gemini';
 import { mockResponse } from '@/lib/mocks';
-import type { Lang, Mode } from '@/lib/types';
+import type { Budget, Gender, Lang, Mode } from '@/lib/types';
+import { buildContextPreamble } from '@/lib/preamble';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,8 @@ type Body = {
   mode: Mode;
   language: Lang;
   message?: string;
+  gender?: Gender | null;
+  budget?: Budget | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  const { imageBase64, mimeType, mode = 'auto', language = 'en', message } = body;
+  const { imageBase64, mimeType, mode = 'auto', language = 'en', message, gender = null, budget = null } = body;
 
   const client = geminiClient();
   if (!client) {
@@ -41,7 +44,9 @@ export async function POST(req: NextRequest) {
     const basePrompt = language === 'tr'
       ? 'Bu görseli analiz et ve önerilerini JSON olarak döndür.'
       : 'Analyze this image and return suggestions as JSON.';
-    const promptText = message ? `${basePrompt}\n\nUser request: ${message}` : basePrompt;
+    const preamble = buildContextPreamble(gender, budget, language);
+    const parts = [preamble, basePrompt, message ? `User request: ${message}` : ''].filter(Boolean);
+    const promptText = parts.join('\n\n');
 
     const result = await model.generateContent([
       {

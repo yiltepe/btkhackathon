@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geminiClient, GEMINI_TEXT_MODEL, PROMPTS, RESPONSE_SCHEMA } from '@/lib/gemini';
 import { mockResponse } from '@/lib/mocks';
-import type { Lang, Mode, ResolvedProduct, Message } from '@/lib/types';
+import type { Budget, Gender, Lang, Mode, ResolvedProduct, Message } from '@/lib/types';
+import { buildContextPreamble } from '@/lib/preamble';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,8 @@ type Body = {
   mode: Mode;
   chatHistory?: Message[];
   language: Lang;
+  gender?: Gender | null;
+  budget?: Budget | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  const { message, resolvedProduct, mode = 'auto', language = 'en' } = body;
+  const { message, resolvedProduct, mode = 'auto', language = 'en', chatHistory = [], gender = null, budget = null } = body;
 
   const client = geminiClient();
   if (!client) {
@@ -36,10 +39,24 @@ export async function POST(req: NextRequest) {
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA as never,
         temperature: 0.4,
+        maxOutputTokens: 4096,
       },
     });
 
+    const HISTORY_TURNS = 16;
+    const trimmed = chatHistory.slice(-HISTORY_TURNS);
+    const firstUserIdx = trimmed.findIndex((m) => m.role === 'user');
+    const aligned = firstUserIdx >= 0 ? trimmed.slice(firstUserIdx) : [];
+    const history = aligned
+      .filter((m) => typeof m.text === 'string' && m.text.trim().length > 0)
+      .map((m) => ({
+        role: m.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: m.text.slice(0, 4000) }],
+      }));
+
     const userParts: string[] = [];
+    const preamble = buildContextPreamble(gender, budget, language);
+    if (preamble) userParts.push(preamble);
     const urlMatch = message.match(/https?:\/\/\S+/);
     if (resolvedProduct) {
       userParts.push(`The user pasted a product link. Here is the resolved product data:\nTitle: ${resolvedProduct.title}`);
@@ -51,7 +68,8 @@ export async function POST(req: NextRequest) {
     }
     userParts.push(`User message: ${message}`);
 
-    const result = await model.generateContent(userParts.join('\n\n'));
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(userParts.join('\n\n'));
     const text = result.response.text();
     const parsed = JSON.parse(text);
     return NextResponse.json(parsed);

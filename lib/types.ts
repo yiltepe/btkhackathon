@@ -1,5 +1,9 @@
 export type Mode = 'auto' | 'price' | 'fashion' | 'home' | 'electronics' | 'beauty';
 export type Lang = 'en' | 'tr';
+export type Gender = 'men' | 'women' | 'unisex';
+export type Budget = { min: number | null; max: number | null; currency: string };
+export type ClarifyGroup = { question: string; options: string[] };
+export type Clarify = { groups: ClarifyGroup[]; allowOther?: boolean };
 
 export type Product = {
   name: string;
@@ -33,6 +37,7 @@ export type StandardResponse = {
   hasVisual: boolean;
   imagePrompt?: string;
   retailers?: Product[];
+  clarify?: Clarify;
 };
 
 export type ResolvedProduct = {

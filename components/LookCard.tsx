@@ -13,6 +13,7 @@ export default function LookCard({
   items,
   onAdd,
   onOpenModal,
+  onCompare,
   lang,
 }: {
   variant: 'fashion' | 'home';
@@ -20,6 +21,7 @@ export default function LookCard({
   items: Product[];
   onAdd: (p: Product) => void;
   onOpenModal: () => void;
+  onCompare?: (p: Product) => void;
   lang: Lang;
 }) {
   const titleKey = variant === 'fashion' ? 'card.fashion.title' : 'card.home.title';
@@ -69,7 +71,7 @@ export default function LookCard({
         {description}
       </p>
 
-      <ProductStrip items={items} onAdd={onAdd} />
+      <ProductStrip items={items} onAdd={onAdd} onCompare={onCompare} />
 
       <div style={{ padding: '8px 16px 14px', borderTop: '1px solid var(--line-soft)' }}>
         <button

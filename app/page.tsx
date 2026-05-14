@@ -5,12 +5,23 @@ import Link from 'next/link';
 import Vitrine from '@/components/Vitrine';
 import Logo from '@/components/Logo';
 import LanguageToggle from '@/components/LanguageToggle';
+import GenderModal from '@/components/GenderModal';
 import { getInitialLang, t } from '@/lib/i18n';
-import type { Lang } from '@/lib/types';
+import { loadGender, saveGender } from '@/lib/prefs';
+import type { Gender, Lang } from '@/lib/types';
 
 export default function LandingPage() {
   const [lang, setLang] = useState<Lang>('en');
-  useEffect(() => setLang(getInitialLang()), []);
+  const [showGender, setShowGender] = useState(false);
+  useEffect(() => {
+    setLang(getInitialLang());
+    if (loadGender() === null) setShowGender(true);
+  }, []);
+
+  const handleGenderPick = (g: Gender) => {
+    saveGender(g);
+    setShowGender(false);
+  };
 
   return (
     <div style={{ minHeight: '100vh', overflowX: 'hidden', position: 'relative' }}>
@@ -182,6 +193,15 @@ export default function LandingPage() {
       >
         {t('landing.meta.right', lang)}
       </div>
+
+      {showGender && (
+        <GenderModal
+          lang={lang}
+          onSelect={handleGenderPick}
+          onSkip={() => setShowGender(false)}
+          onClose={() => setShowGender(false)}
+        />
+      )}
     </div>
   );
 }

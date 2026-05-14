@@ -71,6 +71,23 @@ export const RESPONSE_SCHEMA = {
         required: ['name', 'searchQuery'],
       },
     },
+    clarify: {
+      type: SchemaType.OBJECT,
+      properties: {
+        groups: {
+          type: SchemaType.ARRAY,
+          items: {
+            type: SchemaType.OBJECT,
+            properties: {
+              question: { type: SchemaType.STRING },
+              options: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+            },
+            required: ['question', 'options'],
+          },
+        },
+        allowOther: { type: SchemaType.BOOLEAN },
+      },
+    },
   },
   required: ['mode', 'text', 'hasVisual'],
 };

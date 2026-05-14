@@ -9,20 +9,30 @@ import LookCard from '@/components/LookCard';
 import LinksModal from '@/components/LinksModal';
 import VisualModal from '@/components/VisualModal';
 import CartDrawer from '@/components/CartDrawer';
+import GenderModal from '@/components/GenderModal';
 import { getInitialLang, t } from '@/lib/i18n';
 import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
 import { loadChats, saveChats, makeChat, upsertChat } from '@/lib/chats';
 import { compressImage, isUrl } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
+import { defaultBudget, loadBudget, loadGender, saveBudget, saveGender } from '@/lib/prefs';
 import type {
+  Budget,
   CartItem,
   Chat,
+  Gender,
   Lang,
   Message,
   Mode,
   Product,
   StandardResponse,
 } from '@/lib/types';
+
+const GENDER_LABELS: Record<Gender, { en: string; tr: string }> = {
+  men: { en: 'Men', tr: 'Erkek' },
+  women: { en: 'Women', tr: 'Kadın' },
+  unisex: { en: 'Unisex', tr: 'Unisex' },
+};
 
 const SUGGEST_PROMPTS = [
   { mode: 'price' as Mode, labelKey: 'prompt.price.label', exampleKey: 'prompt.price.example' },
@@ -271,13 +281,58 @@ export default function ChatPage() {
   } | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [gender, setGender] = useState<Gender | null>(null);
+  const [budget, setBudget] = useState<Budget>(defaultBudget('en'));
+  const [genderModalOpen, setGenderModalOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setLang(getInitialLang());
+    const initialLang = getInitialLang();
+    setLang(initialLang);
     setCart(loadCart());
     setChats(loadChats());
+    setGender(loadGender());
+    setBudget(loadBudget(initialLang));
   }, []);
+
+  const updateGender = (g: Gender) => {
+    saveGender(g);
+    setGender(g);
+    setGenderModalOpen(false);
+  };
+
+  const updateBudget = (b: Budget) => {
+    saveBudget(b);
+    setBudget(b);
+  };
+
+  const compareProduct = async (p: Product, m: Mode) => {
+    setLinksOpen({ products: [p], name: p.name });
+    const more = await fetchProducts(p.name, m);
+    const seen = new Set<string>([p.retailer.toLowerCase()]);
+    const merged = [p, ...more.filter((x) => {
+      const k = x.retailer.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })];
+    merged.sort((a, b) => {
+      if (a.price === null && b.price === null) return 0;
+      if (a.price === null) return 1;
+      if (b.price === null) return -1;
+      return a.price - b.price;
+    });
+    setLinksOpen({ products: merged, name: p.name });
+  };
+
+  const appendToInput = (chip: string) => {
+    setInput((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) return chip;
+      if (trimmed.toLowerCase().split(/[,\s]+/).includes(chip.toLowerCase())) return prev;
+      return `${trimmed}, ${chip}`;
+    });
+  };
 
   useEffect(() => {
     saveCart(cart);
@@ -337,6 +392,8 @@ export default function ChatPage() {
           mode,
           chatHistory: messages,
           language: lang,
+          gender,
+          budget,
         }),
       });
       const data = (await res.json()) as StandardResponse;
@@ -351,7 +408,7 @@ export default function ChatPage() {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, mode: m, language: lang }),
+        body: JSON.stringify({ query, mode: m, language: lang, gender, budget }),
       });
       const data = (await res.json()) as { products: Product[] };
       return data.products ?? [];
@@ -365,12 +422,15 @@ export default function ChatPage() {
     if (resolvedMode === 'auto') {
       resolvedMode = inferMode(response.text);
     }
+    const needsClarification = !!(response.clarify?.groups?.length);
     const hasShoppingIntent =
-      !!response.identifiedItem ||
-      (response.suggestions?.length ?? 0) > 0 ||
-      (response.retailers?.length ?? 0) > 0 ||
-      response.hasVisual ||
-      resolvedMode !== 'price';
+      !needsClarification && (
+        !!response.identifiedItem ||
+        (response.suggestions?.length ?? 0) > 0 ||
+        (response.retailers?.length ?? 0) > 0 ||
+        response.hasVisual ||
+        resolvedMode !== 'price'
+      );
 
     let products: Product[] = response.retailers ?? [];
     if (hasShoppingIntent && products.length === 0) {
@@ -443,7 +503,7 @@ export default function ChatPage() {
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: file.base64, mimeType: file.mimeType, mode, language: lang, message: text || undefined }),
+          body: JSON.stringify({ imageBase64: file.base64, mimeType: file.mimeType, mode, language: lang, message: text || undefined, gender, budget }),
         });
         const data = (await res.json()) as StandardResponse;
         setPending(false);
@@ -582,7 +642,34 @@ export default function ChatPage() {
           <div style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500, letterSpacing: '-.005em' }}>
             {messages.length ? activeTitle : t('chat.title.new', lang)}
           </div>
-          <LanguageToggle lang={lang} onChange={setLang} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              type="button"
+              onClick={() => setGenderModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                borderRadius: 999,
+                border: '1px solid var(--line)',
+                background: 'var(--pill)',
+                color: 'var(--ink)',
+                fontSize: 12,
+                fontWeight: 500,
+                letterSpacing: '-.005em',
+                cursor: 'pointer',
+              }}
+              title={t('gender.chip', lang)}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 21a8 8 0 0 1 16 0" />
+              </svg>
+              {gender ? GENDER_LABELS[gender][lang] : t('gender.chip', lang)}
+            </button>
+            <LanguageToggle lang={lang} onChange={setLang} />
+          </div>
         </header>
 
         <section
@@ -625,6 +712,7 @@ export default function ChatPage() {
                         description={msg.text}
                         items={msg.products ?? []}
                         onAdd={addProductToCart}
+                        onCompare={(p) => compareProduct(p, msg.kind as Mode)}
                         onOpenModal={() =>
                           setVisualOpen({
                             kind: msg.kind as 'fashion' | 'home',
@@ -635,6 +723,77 @@ export default function ChatPage() {
                         }
                         lang={lang}
                       />
+                    ) : null}
+                    {msg.response?.clarify?.groups?.length ? (
+                      <div style={{ marginTop: 14 }}>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: 'var(--muted)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '.12em',
+                            fontWeight: 500,
+                            marginBottom: 10,
+                          }}
+                        >
+                          {t('clarify.prompt', lang)}
+                        </div>
+                        {msg.response.clarify.groups.map((grp, gi) => (
+                          <div key={gi} style={{ marginBottom: 12 }}>
+                            <div
+                              style={{
+                                fontSize: 12.5,
+                                color: 'var(--ink)',
+                                marginBottom: 6,
+                                fontWeight: 500,
+                                letterSpacing: '-.005em',
+                              }}
+                            >
+                              {grp.question}
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {grp.options.map((opt) => (
+                                <button
+                                  key={opt}
+                                  onClick={() => appendToInput(opt)}
+                                  style={{
+                                    padding: '5px 11px',
+                                    borderRadius: 999,
+                                    border: '1px solid var(--line)',
+                                    background: 'var(--bg-soft)',
+                                    fontSize: 12.5,
+                                    color: 'var(--ink)',
+                                    cursor: 'pointer',
+                                    transition: 'border-color .14s, color .14s',
+                                  }}
+                                  onMouseEnter={(ev) => {
+                                    ev.currentTarget.style.borderColor = 'var(--accent)';
+                                    ev.currentTarget.style.color = 'var(--accent)';
+                                  }}
+                                  onMouseLeave={(ev) => {
+                                    ev.currentTarget.style.borderColor = 'var(--line)';
+                                    ev.currentTarget.style.color = 'var(--ink)';
+                                  }}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {msg.response.clarify.allowOther && (
+                          <div
+                            style={{
+                              fontSize: 11.5,
+                              color: 'var(--muted)',
+                              fontStyle: 'italic',
+                              marginTop: 2,
+                            }}
+                          >
+                            {t('clarify.otherHint', lang)}
+                          </div>
+                        )}
+                      </div>
                     ) : null}
                   </AIMsg>
                 ),
@@ -656,6 +815,8 @@ export default function ChatPage() {
           pendingFilePreview={pendingFile?.preview}
           lang={lang}
           resolving={resolving}
+          budget={budget}
+          onBudgetChange={updateBudget}
         />
       </main>
 
@@ -690,6 +851,16 @@ export default function ChatPage() {
         onClear={() => setCart([])}
         lang={lang}
       />
+
+      {genderModalOpen && (
+        <GenderModal
+          lang={lang}
+          current={gender}
+          onSelect={updateGender}
+          onClose={() => setGenderModalOpen(false)}
+          showSkip={false}
+        />
+      )}
     </div>
   );
 }

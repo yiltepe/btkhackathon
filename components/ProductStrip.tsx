@@ -6,13 +6,14 @@ import { Glyph } from './Icons';
 import { formatPrice } from '@/lib/format';
 import type { Product } from '@/lib/types';
 
-function Chip({ item, onAdd }: { item: Product; onAdd: () => void }) {
+function Chip({ item, onAdd, onCompare }: { item: Product; onAdd: () => void; onCompare?: () => void }) {
   const [hov, setHov] = useState(false);
   const [added, setAdded] = useState(false);
   return (
     <div
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
+      onClick={onCompare}
       style={{
         flex: '0 0 auto',
         width: 148,
@@ -23,6 +24,7 @@ function Chip({ item, onAdd }: { item: Product; onAdd: () => void }) {
         padding: 10,
         position: 'relative',
         transition: 'all .14s',
+        cursor: onCompare ? 'pointer' : 'default',
       }}
     >
       <Thumbnail src={item.thumbnail} size={128} />
@@ -48,7 +50,8 @@ function Chip({ item, onAdd }: { item: Product; onAdd: () => void }) {
         </span>
       </div>
       <button
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           setAdded(true);
           onAdd();
           setTimeout(() => setAdded(false), 1200);
@@ -78,9 +81,11 @@ function Chip({ item, onAdd }: { item: Product; onAdd: () => void }) {
 export default function ProductStrip({
   items,
   onAdd,
+  onCompare,
 }: {
   items: Product[];
   onAdd: (p: Product) => void;
+  onCompare?: (p: Product) => void;
 }) {
   return (
     <div
@@ -93,7 +98,12 @@ export default function ProductStrip({
       }}
     >
       {items.map((it, i) => (
-        <Chip key={i} item={it} onAdd={() => onAdd(it)} />
+        <Chip
+          key={i}
+          item={it}
+          onAdd={() => onAdd(it)}
+          onCompare={onCompare ? () => onCompare(it) : undefined}
+        />
       ))}
     </div>
   );

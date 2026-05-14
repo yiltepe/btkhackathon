@@ -3,8 +3,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Glyph } from './Icons';
 import ModeSelector from './ModeSelector';
+import BudgetChip from './BudgetChip';
 import { t } from '@/lib/i18n';
-import type { Lang, Mode } from '@/lib/types';
+import type { Budget, Lang, Mode } from '@/lib/types';
 
 export default function InputBar({
   mode,
@@ -17,6 +18,8 @@ export default function InputBar({
   pendingFilePreview,
   lang,
   resolving,
+  budget,
+  onBudgetChange,
 }: {
   mode: Mode;
   setMode: (m: Mode) => void;
@@ -28,6 +31,8 @@ export default function InputBar({
   pendingFilePreview?: string;
   lang: Lang;
   resolving?: boolean;
+  budget: Budget;
+  onBudgetChange: (b: Budget) => void;
 }) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,7 +54,7 @@ export default function InputBar({
           border: '1px solid var(--line)',
           borderRadius: 6,
           boxShadow: 'var(--shadow)',
-          overflow: 'hidden',
+          position: 'relative',
         }}
       >
         <div
@@ -62,6 +67,9 @@ export default function InputBar({
         >
           <ModeSelector mode={mode} setMode={setMode} lang={lang} />
           <div style={{ flex: 1 }} />
+          <div style={{ paddingRight: 8 }}>
+            <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
+          </div>
           <span
             style={{
               fontSize: 11,
