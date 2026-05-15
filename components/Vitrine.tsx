@@ -28,69 +28,23 @@ function Item({ item }: { item: VitrineItem }) {
     <div
       style={{
         flex: '0 0 auto',
-        height: 200,
-        width: isHanger ? 150 : 170,
+        height: 280,
+        width: 280,
         background: '#FFFFFF',
         border: '1px solid var(--line-soft)',
         borderRadius: 4,
         boxShadow: 'var(--shadow-item)',
-        padding: isHanger ? '8px 18px 16px' : 18,
         position: 'relative',
-        display: 'flex',
-        flexDirection: isHanger ? 'column' : 'row',
-        alignItems: isHanger ? 'stretch' : 'center',
-        justifyContent: isHanger ? 'flex-start' : 'center',
+        overflow: 'hidden',
       }}
     >
-      <span
-        style={{
-          position: 'absolute',
-          top: 10,
-          left: 12,
-          fontSize: 9,
-          letterSpacing: '.12em',
-          color: 'var(--muted)',
-          textTransform: 'uppercase',
-          fontWeight: 500,
-        }}
-      >
-        {item.tag}
-      </span>
-      {isHanger && (
-        <div
-          style={{
-            height: 8,
-            borderBottom: '1px solid #D8D6D1',
-            marginBottom: -4,
-            position: 'relative',
-          }}
-        >
-          <span
-            style={{
-              content: '',
-              position: 'absolute',
-              left: '50%',
-              top: -7,
-              width: 10,
-              height: 5,
-              border: '1px solid #C9C5BD',
-              borderBottom: 0,
-              borderRadius: '50% 50% 0 0 / 100% 100% 0 0',
-              transform: 'translateX(-50%)',
-              display: 'block',
-            }}
-          />
-        </div>
-      )}
       <div
         style={{
-          flex: 1,
-          minHeight: 0,
+          position: 'absolute',
+          inset: 0,
           display: 'flex',
-          alignItems: isHanger ? 'stretch' : 'center',
+          alignItems: 'center',
           justifyContent: 'center',
-          marginTop: isHanger ? 6 : 0,
-          width: '100%',
         }}
       >
         {item.body}
@@ -98,11 +52,30 @@ function Item({ item }: { item: VitrineItem }) {
       <span
         style={{
           position: 'absolute',
-          bottom: 10,
-          right: 12,
+          top: 12,
+          left: 14,
           fontSize: 10,
-          color: 'var(--muted)',
+          letterSpacing: '.14em',
+          color: 'var(--ink)',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+          zIndex: 1,
+          mixBlendMode: 'multiply',
+        }}
+      >
+        {item.tag}
+      </span>
+      <span
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          right: 14,
+          fontSize: 12,
+          color: 'var(--ink)',
           fontVariantNumeric: 'tabular-nums',
+          fontWeight: 500,
+          zIndex: 1,
+          mixBlendMode: 'multiply',
         }}
       >
         {item.price}
@@ -113,16 +86,23 @@ function Item({ item }: { item: VitrineItem }) {
 
 export default function Vitrine() {
   const rows = useMemo(() => {
-    const fashion = ITEMS.filter((i) => i.kind === 'hanger');
-    const objects = ITEMS.filter((i) => i.kind === 'square');
+    const deAdjacent = (arr: VitrineItem[]) => {
+      const out = arr.slice();
+      for (let i = 1; i < out.length; i++) {
+        if (out[i].tag === out[i - 1].tag) {
+          for (let j = i + 1; j < out.length; j++) {
+            if (out[j].tag !== out[i - 1].tag && (i + 1 >= out.length || out[j].tag !== out[i + 1]?.tag)) {
+              [out[i], out[j]] = [out[j], out[i]];
+              break;
+            }
+          }
+        }
+      }
+      return out;
+    };
     return ROW_CONFIG.map((cfg) => {
-      let pool: VitrineItem[];
-      if (cfg.pick === 'fashion') pool = fashion;
-      else if (cfg.pick === 'objects') pool = objects;
-      else pool = seededShuffle(fashion, cfg.seed).concat(seededShuffle(objects, cfg.seed + 1).slice(0, 4));
-      const shuffled = seededShuffle(pool, cfg.seed + 7);
-      const doubled = shuffled.concat(shuffled);
-      return { ...cfg, items: doubled };
+      const shuffled = deAdjacent(seededShuffle(ITEMS, cfg.seed + 7));
+      return { ...cfg, items: shuffled.concat(shuffled) };
     });
   }, []);
 

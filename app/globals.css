@@ -58,11 +58,11 @@ a { color: inherit; text-decoration: none; }
 .vitrine-row { display: flex; align-items: center; width: max-content; gap: 18px; will-change: transform; }
 .vitrine-row.l { animation: drift-l linear infinite; }
 .vitrine-row.r { animation: drift-r linear infinite; }
-.vitrine-row.s1 { animation-duration: 80s; }
-.vitrine-row.s2 { animation-duration: 95s; }
-.vitrine-row.s3 { animation-duration: 70s; }
-.vitrine-row.s4 { animation-duration: 105s; }
-.vitrine-row.s5 { animation-duration: 88s; }
+.vitrine-row.s1 { animation-duration: 180s; }
+.vitrine-row.s2 { animation-duration: 210s; }
+.vitrine-row.s3 { animation-duration: 160s; }
+.vitrine-row.s4 { animation-duration: 230s; }
+.vitrine-row.s5 { animation-duration: 200s; }
 @media (prefers-reduced-motion: reduce) {
   .vitrine-row { animation: none !important; }
 }
