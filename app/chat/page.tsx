@@ -10,14 +10,16 @@ import LinksModal from '@/components/LinksModal';
 import VisualModal from '@/components/VisualModal';
 import CartDrawer from '@/components/CartDrawer';
 import GenderModal from '@/components/GenderModal';
+import ComparisonCard from '@/components/ComparisonCard';
 import { getInitialLang, t } from '@/lib/i18n';
 import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
 import { loadChats, saveChats, makeChat, upsertChat, deleteChat } from '@/lib/chats';
-import { compressImage, extractUrl } from '@/lib/image';
+import { compressImage, extractUrls } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
 import { isTrusted } from '@/lib/retailers';
-import { defaultBudget, loadBudget, loadGender, saveBudget, saveGender } from '@/lib/prefs';
+import { defaultBudget, loadBudget, loadGender, loadPrefsSummary, saveBudget, saveGender, savePrefsSummary } from '@/lib/prefs';
 import type {
+  Attachment,
   Budget,
   CartItem,
   Chat,
@@ -26,8 +28,22 @@ import type {
   Message,
   Mode,
   Product,
+  ResolvedProduct,
   StandardResponse,
 } from '@/lib/types';
+
+const MAX_ATTACHMENTS = 4;
+
+type ApiErrorResponse = {
+  error?: 'missing_api_key' | 'rate_limited' | 'provider_denied' | 'provider_unavailable' | 'invalid_response' | string;
+  provider?: string;
+  status?: number;
+  retryable?: boolean;
+};
+
+type ChatResult =
+  | { ok: true; response: StandardResponse }
+  | { ok: false; message: string };
 
 const GENDER_LABELS: Record<Gender, { en: string; tr: string }> = {
   men: { en: 'Men', tr: 'Erkek' },
@@ -41,6 +57,23 @@ const SUGGEST_PROMPTS = [
   { mode: 'home' as Mode, labelKey: 'prompt.home.label', exampleKey: 'prompt.home.example' },
   { mode: 'electronics' as Mode, labelKey: 'prompt.electronics.label', exampleKey: 'prompt.electronics.example' },
 ];
+
+function localizeApiError(err: ApiErrorResponse, lang: Lang): string {
+  switch (err.error) {
+    case 'rate_limited':
+      return t('chat.error.rateLimited', lang);
+    case 'provider_denied':
+      return t('chat.error.providerDenied', lang);
+    case 'provider_unavailable':
+      return t('chat.error.providerUnavailable', lang);
+    case 'invalid_response':
+      return t('chat.error.invalidResponse', lang);
+    case 'missing_api_key':
+      return t('chat.error.missingApiKey', lang);
+    default:
+      return t('chat.error.generic', lang);
+  }
+}
 
 function EmptyState({
   lang,
@@ -159,6 +192,12 @@ function EmptyState({
 }
 
 function UserMsg({ msg }: { msg: Message }) {
+  const atts: Attachment[] = msg.attachments && msg.attachments.length
+    ? msg.attachments
+    : msg.attachment
+    ? [msg.attachment]
+    : [];
+  const images = atts.filter((a) => a.kind === 'image' && a.preview);
   return (
     <div className="oben-msg-in" style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 0' }}>
       <div
@@ -174,19 +213,26 @@ function UserMsg({ msg }: { msg: Message }) {
           whiteSpace: 'pre-wrap',
         }}
       >
-        {msg.attachment?.kind === 'image' && msg.attachment.preview && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={msg.attachment.preview}
-            alt=""
-            style={{
-              display: 'block',
-              maxWidth: 240,
-              maxHeight: 240,
-              borderRadius: 8,
-              marginBottom: msg.text ? 8 : 0,
-            }}
-          />
+        {images.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: msg.text ? 8 : 0 }}>
+            {images.map((a, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={a.preview!}
+                alt=""
+                style={{
+                  display: 'block',
+                  width: images.length > 1 ? 110 : 240,
+                  height: images.length > 1 ? 110 : 'auto',
+                  maxWidth: 240,
+                  maxHeight: 240,
+                  objectFit: 'cover',
+                  borderRadius: 8,
+                }}
+              />
+            ))}
+          </div>
         )}
         {msg.text}
       </div>
@@ -284,7 +330,8 @@ export default function ChatPage() {
   const [pending, setPending] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<{ base64: string; mimeType: string; preview: string } | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<{ base64: string; mimeType: string; preview: string }[]>([]);
+  const [attachLimitNote, setAttachLimitNote] = useState<string | null>(null);
   const [linksOpen, setLinksOpen] = useState<{ products: Product[]; name: string; loading?: boolean } | null>(null);
   const [visualOpen, setVisualOpen] = useState<{
     msgId: string;
@@ -301,6 +348,7 @@ export default function ChatPage() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [budget, setBudget] = useState<Budget>(defaultBudget('en'));
   const [genderModalOpen, setGenderModalOpen] = useState(false);
+  const [prefsSummary, setPrefsSummary] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -310,6 +358,7 @@ export default function ChatPage() {
     setChats(loadChats());
     setGender(loadGender());
     setBudget(loadBudget(initialLang));
+    setPrefsSummary(loadPrefsSummary());
   }, []);
 
   const updateGender = (g: Gender) => {
@@ -397,26 +446,31 @@ export default function ChatPage() {
 
   const callChat = async (
     text: string,
-    resolvedProduct?: { title: string; image?: string; jsonLd?: Record<string, unknown> },
-  ): Promise<StandardResponse | null> => {
+    resolvedProducts: ResolvedProduct[],
+  ): Promise<ChatResult> => {
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: text,
-          resolvedProduct,
+          resolvedProduct: resolvedProducts[0],
+          resolvedProducts,
           mode,
           chatHistory: messages,
           language: lang,
           gender,
           budget,
+          prefsSummary,
         }),
       });
-      const data = (await res.json()) as StandardResponse;
-      return data;
+      const data = (await res.json()) as StandardResponse | ApiErrorResponse;
+      if (!res.ok) {
+        return { ok: false, message: localizeApiError(data as ApiErrorResponse, lang) };
+      }
+      return { ok: true, response: data as StandardResponse };
     } catch {
-      return null;
+      return { ok: false, message: t('chat.error.generic', lang) };
     }
   };
 
@@ -435,6 +489,11 @@ export default function ChatPage() {
   };
 
   const handleResponse = async (response: StandardResponse, baseMessages: Message[], forceShoppingIntent = false) => {
+    if (response.prefsSummary && response.prefsSummary.trim()) {
+      const trimmed = response.prefsSummary.trim().slice(0, 200);
+      setPrefsSummary(trimmed);
+      savePrefsSummary(trimmed);
+    }
     const VALID_MODES: Mode[] = ['price', 'fashion', 'home', 'electronics', 'beauty'];
     let resolvedMode: Mode = response.mode as Mode;
     if (!VALID_MODES.includes(resolvedMode)) {
@@ -452,7 +511,28 @@ export default function ChatPage() {
       );
 
     let products: Product[] = response.retailers ?? [];
-    if (hasShoppingIntent && products.length === 0) {
+    let productsByIndex: Message['productsByIndex'] | undefined;
+
+    // Multi-source FIND_CHEAPER: each suggestion has a distinct sourceIndex → one search per item.
+    const suggestionsWithIdx = (response.suggestions ?? []).filter((s) => typeof s.sourceIndex === 'number');
+    const distinctIdx = new Set(suggestionsWithIdx.map((s) => s.sourceIndex as number));
+    if (hasShoppingIntent && products.length === 0 && distinctIdx.size >= 2) {
+      const ordered = Array.from(distinctIdx).sort((a, b) => a - b);
+      setStatus(`${t('chat.status.searching', lang)} (${ordered.length})`);
+      const groups = await Promise.all(
+        ordered.map(async (idx) => {
+          const s = suggestionsWithIdx.find((x) => x.sourceIndex === idx)!;
+          const query = s.searchQuery || s.name;
+          const items = await fetchProducts(query, resolvedMode);
+          return { sourceIndex: idx, label: s.name || query, items };
+        }),
+      );
+      productsByIndex = groups;
+      products = groups.flatMap((g) => g.items.slice(0, 3));
+      if (products.length === 0) {
+        products = mockProducts(resolvedMode, lang);
+      }
+    } else if (hasShoppingIntent && products.length === 0) {
       if ((resolvedMode === 'fashion' || resolvedMode === 'home') && response.suggestions?.length) {
         // One search per suggested piece; pick the cheapest match per query.
         // Prefer a color-qualified query so retailer thumbnails match the generated visual.
@@ -506,6 +586,7 @@ export default function ChatPage() {
       kind,
       response,
       products,
+      productsByIndex,
     };
     const next = [...baseMessages, aiMsg];
     setMessages(next);
@@ -514,18 +595,20 @@ export default function ChatPage() {
 
   const send = async () => {
     const text = input.trim();
-    if (!text && !pendingFile) return;
+    if (!text && pendingFiles.length === 0) return;
     setInput('');
 
-    // Image + optional text: call analyze
-    if (pendingFile) {
-      const file = pendingFile;
-      setPendingFile(null);
+    // Image(s) + optional text: call analyze
+    if (pendingFiles.length > 0) {
+      const files = pendingFiles;
+      setPendingFiles([]);
+      setAttachLimitNote(null);
       const userMsg: Message = {
         id: 'u' + Date.now().toString(36),
         role: 'user',
         text,
-        attachment: { kind: 'image', preview: file.preview },
+        attachments: files.map((f) => ({ kind: 'image', preview: f.preview })),
+        attachment: files[0] ? { kind: 'image', preview: files[0].preview } : undefined,
       };
       const base = [...messages, userMsg];
       setMessages(base);
@@ -535,13 +618,41 @@ export default function ChatPage() {
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: file.base64, mimeType: file.mimeType, mode, language: lang, message: text || undefined, gender, budget }),
+          body: JSON.stringify({
+            imageBase64: files[0].base64,
+            mimeType: files[0].mimeType,
+            images: files.map((f) => ({ base64: f.base64, mimeType: f.mimeType })),
+            mode,
+            language: lang,
+            message: text || undefined,
+            gender,
+            budget,
+            chatHistory: messages,
+          }),
         });
-        const data = (await res.json()) as StandardResponse;
+        const data = (await res.json()) as StandardResponse | ApiErrorResponse;
+        if (!res.ok) {
+          const aiMsg: Message = {
+            id: 'a' + Date.now().toString(36),
+            role: 'ai',
+            text: localizeApiError(data as ApiErrorResponse, lang),
+          };
+          const next = [...base, aiMsg];
+          setMessages(next);
+          persistChat(next);
+          return;
+        }
         setStatus(t('chat.status.thinking', lang));
-        await handleResponse(data, base, true);
+        await handleResponse(data as StandardResponse, base, true);
       } catch {
-        /* ignore */
+        const aiMsg: Message = {
+          id: 'a' + Date.now().toString(36),
+          role: 'ai',
+          text: t('chat.error.generic', lang),
+        };
+        const next = [...base, aiMsg];
+        setMessages(next);
+        persistChat(next);
       } finally {
         setPending(false);
         setStatus(null);
@@ -549,57 +660,86 @@ export default function ChatPage() {
       return;
     }
 
-    // Text-only path
-    let attachment: Message['attachment'];
-    let resolvedProduct: { title: string; image?: string; jsonLd?: Record<string, unknown> } | undefined;
-    const detectedUrl = extractUrl(text);
-    if (detectedUrl) {
-      attachment = { kind: 'link', label: detectedUrl };
+    // Text path (may contain 0..N URLs)
+    const detectedUrls = extractUrls(text).slice(0, MAX_ATTACHMENTS);
+    let resolvedProducts: ResolvedProduct[] = [];
+    let attachments: Attachment[] | undefined;
+    if (detectedUrls.length > 0) {
+      attachments = detectedUrls.map((u) => ({ kind: 'link', label: u }));
       setResolving(true);
-      setStatus(t('chat.status.resolving', lang));
-      try {
-        const res = await fetch('/api/resolve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: detectedUrl }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as {
-            title?: string;
-            image?: string;
-            jsonLd?: Record<string, unknown>;
-            fallback?: boolean;
-            error?: string;
-          };
-          if (!data.error && data.title) {
-            resolvedProduct = { title: data.title, image: data.image, jsonLd: data.jsonLd };
-            if (data.fallback) {
-              setStatus(t('chat.status.resolvingFallback', lang));
-            }
+      setStatus(
+        detectedUrls.length > 1
+          ? t('chat.resolvingMulti', lang).replace('{n}', String(detectedUrls.length))
+          : t('chat.status.resolving', lang),
+      );
+      const results = await Promise.all(
+        detectedUrls.map(async (u) => {
+          try {
+            const res = await fetch('/api/resolve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ url: u }),
+            });
+            if (!res.ok) return null;
+            const data = (await res.json()) as {
+              title?: string;
+              image?: string;
+              jsonLd?: Record<string, unknown>;
+              fallback?: boolean;
+              error?: string;
+            };
+            if (data.error || !data.title) return null;
+            return { title: data.title, image: data.image, jsonLd: data.jsonLd, sourceUrl: u } as ResolvedProduct;
+          } catch {
+            return null;
           }
-        }
-      } catch { /* ignore */ }
+        }),
+      );
+      results.forEach((r) => {
+        if (r) resolvedProducts.push(r);
+      });
       setResolving(false);
+    }
+
+    // Carry forward resolved products from the most recent user message if this
+    // turn has no fresh resolves — supports the "ask intent → user picks chip" flow.
+    if (resolvedProducts.length === 0) {
+      const carried = [...messages].reverse().find(
+        (m) => m.role === 'user' && (m.resolvedProducts?.length ?? 0) > 0,
+      );
+      if (carried?.resolvedProducts) {
+        resolvedProducts = carried.resolvedProducts;
+      }
     }
 
     const userMsg: Message = {
       id: 'u' + Date.now().toString(36),
       role: 'user',
       text,
-      attachment,
+      attachment: attachments?.[0],
+      attachments,
+      resolvedProducts: resolvedProducts.length ? resolvedProducts : undefined,
     };
     const base = [...messages, userMsg];
     setMessages(base);
     setPending(true);
     setStatus(t('chat.status.thinking', lang));
 
-    const response = await callChat(text, resolvedProduct);
-    if (!response) {
+    const result = await callChat(text, resolvedProducts);
+    if (!result.ok) {
+      const aiMsg: Message = {
+        id: 'a' + Date.now().toString(36),
+        role: 'ai',
+        text: result.message,
+      };
+      const next = [...base, aiMsg];
+      setMessages(next);
+      persistChat(next);
       setPending(false);
       setStatus(null);
       return;
     }
-    await handleResponse(response, base, !!detectedUrl);
+    await handleResponse(result.response, base, detectedUrls.length > 0);
     setPending(false);
     setStatus(null);
   };
@@ -609,10 +749,21 @@ export default function ChatPage() {
       alert(t('chat.imageTooLarge', lang));
       return;
     }
+    if (pendingFiles.length >= MAX_ATTACHMENTS) {
+      setAttachLimitNote(t('chat.attachLimit', lang));
+      return;
+    }
     try {
       const { base64, mimeType } = await compressImage(file);
       const preview = `data:${mimeType};base64,${base64}`;
-      setPendingFile({ base64, mimeType, preview });
+      setPendingFiles((prev) => {
+        if (prev.length >= MAX_ATTACHMENTS) {
+          setAttachLimitNote(t('chat.attachLimit', lang));
+          return prev;
+        }
+        return [...prev, { base64, mimeType, preview }];
+      });
+      setAttachLimitNote(null);
     } catch {
       /* ignore */
     }
@@ -751,7 +902,35 @@ export default function ChatPage() {
                 ) : (
                   <AIMsg key={msg.id}>
                     <p style={{ margin: '0 0 6px' }}>{msg.text}</p>
-                    {msg.kind === 'price' || msg.kind === 'electronics' || msg.kind === 'beauty' ? (
+                    {(msg.kind === 'price' || msg.kind === 'electronics' || msg.kind === 'beauty') && msg.productsByIndex && msg.productsByIndex.length > 1 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 12 }}>
+                        {msg.productsByIndex.map((grp) => (
+                          <div key={grp.sourceIndex}>
+                            <div
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--muted)',
+                                textTransform: 'uppercase',
+                                letterSpacing: '.12em',
+                                fontWeight: 500,
+                                marginBottom: 6,
+                              }}
+                            >
+                              #{grp.sourceIndex + 1} · {grp.label}
+                            </div>
+                            <PriceCard
+                              productName={grp.label}
+                              retailers={grp.items}
+                              onAdd={addProductToCart}
+                              onOpenModal={() =>
+                                setLinksOpen({ products: grp.items, name: grp.label })
+                              }
+                              lang={lang}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : msg.kind === 'price' || msg.kind === 'electronics' || msg.kind === 'beauty' ? (
                       <PriceCard
                         productName={msg.response?.identifiedItem?.name}
                         retailers={msg.products ?? []}
@@ -801,6 +980,9 @@ export default function ChatPage() {
                         }}
                         lang={lang}
                       />
+                    ) : null}
+                    {msg.response?.comparison?.items?.length ? (
+                      <ComparisonCard comparison={msg.response.comparison} lang={lang} />
                     ) : null}
                     {msg.response?.clarify?.groups?.length ? (
                       <div style={{ marginTop: 14 }}>
@@ -887,8 +1069,16 @@ export default function ChatPage() {
           setValue={setInput}
           onSend={send}
           onAttach={onAttach}
-          onClearFile={() => setPendingFile(null)}
-          pendingFilePreview={pendingFile?.preview}
+          onClearFile={(idx) => {
+            setAttachLimitNote(null);
+            if (typeof idx === 'number') {
+              setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+            } else {
+              setPendingFiles([]);
+            }
+          }}
+          pendingFilePreviews={pendingFiles.map((f) => f.preview)}
+          attachLimitNote={attachLimitNote ?? undefined}
           lang={lang}
           resolving={resolving}
           budget={budget}

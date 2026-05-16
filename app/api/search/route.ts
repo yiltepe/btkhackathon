@@ -14,6 +14,28 @@ function genderQualifier(gender: Gender | null | undefined, mode: Mode, lang: La
   return gender === 'men' ? ' men' : ' women';
 }
 
+const LOCALE_RETAILERS: Record<Lang, string[]> = {
+  tr: ['trendyol.com', 'hepsiburada.com', 'n11.com', 'gittigidiyor.com', 'amazon.com.tr', 'teknosa.com', 'mediamarkt.com.tr', 'vatanbilgisayar.com', 'boyner.com.tr', 'koton.com', 'lcw.com', 'morhipo.com'],
+  en: ['amazon.com', 'walmart.com', 'target.com', 'bestbuy.com', 'ebay.com', 'mrporter.com', 'ssense.com', 'farfetch.com'],
+};
+
+function localeBoost(p: Product, lang: Lang): number {
+  const hay = `${p.link || ''} ${p.retailer || ''}`.toLowerCase();
+  return LOCALE_RETAILERS[lang].some((d) => hay.includes(d)) ? 1 : 0;
+}
+
+function applyLocaleSort(products: Product[], lang: Lang): Product[] {
+  return [...products].sort((a, b) => {
+    const ba = localeBoost(a, lang);
+    const bb = localeBoost(b, lang);
+    if (ba !== bb) return bb - ba;
+    if (a.price === null && b.price === null) return 0;
+    if (a.price === null) return 1;
+    if (b.price === null) return -1;
+    return a.price - b.price;
+  });
+}
+
 function applyBudgetFilter(products: Product[], budget: Budget | null | undefined): Product[] {
   if (!budget || (budget.min === null && budget.max === null)) return products;
   const priced = products.filter((p) => p.price !== null);
@@ -54,13 +76,8 @@ export async function POST(req: NextRequest) {
         (m) => !products.some((p) => p.retailer === m.retailer),
       );
       products = [...products, ...padding].slice(0, 8);
-      products.sort((a, b) => {
-        if (a.price === null && b.price === null) return 0;
-        if (a.price === null) return 1;
-        if (b.price === null) return -1;
-        return a.price - b.price;
-      });
     }
+    products = applyLocaleSort(products, language);
     return NextResponse.json({ products });
   } catch (err) {
     console.error('[api/search] Serper error → falling back to mock:', err);

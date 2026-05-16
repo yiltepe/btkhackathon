@@ -14,13 +14,16 @@ function budgetLine(b: Budget, lang: Lang): string {
   return '';
 }
 
-export function buildContextPreamble(gender: Gender | null, budget: Budget | null, lang: Lang): string {
+export function buildContextPreamble(gender: Gender | null, budget: Budget | null, lang: Lang, prefsSummary?: string | null): string {
   const lines: string[] = [];
   if (gender) {
     lines.push(`User shops for: ${GENDER_LABEL[gender][lang]}.`);
   }
   if (budget && (budget.min !== null || budget.max !== null)) {
     lines.push(`User budget per item: ${budgetLine(budget, lang)}. Stay within this range when suggesting products and search queries; if the requested item cannot reasonably fit, mention it briefly.`);
+  }
+  if (prefsSummary && prefsSummary.trim()) {
+    lines.push(`Known preferences (rolling summary from prior turns): ${prefsSummary.trim()}. Honor these unless the user contradicts. Refresh your own \`prefsSummary\` field at the end of this turn.`);
   }
   lines.push(
     'CLARIFY RULE: Only ask clarifying questions when the request is genuinely too vague to act on (e.g. "find me shorts", "I need shoes"). When you do clarify, DO NOT generate suggestions, identifiedItem, or imagePrompt yet — respond with a brief friendly `text` (in the user\'s language) and populate `clarify.groups`, each `{ question, options[] }`. Pick ONLY the dimensions that actually matter for the specific item, and skip any dimension the user has already specified.',

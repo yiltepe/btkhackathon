@@ -75,20 +75,53 @@ export function mockProducts(mode: Mode, lang: Lang): Product[] {
   return lang === 'tr' ? RETAILERS_TR : RETAILERS_EN;
 }
 
+export function mockComparison(lang: Lang): StandardResponse {
+  if (lang === 'tr') {
+    return {
+      mode: 'price',
+      text: 'Oyun için Sony — düşük gecikme ve net mikrofon onu daha güvenli seçim yapıyor.',
+      hasVisual: false,
+      comparison: {
+        items: [
+          { name: 'Sony WH-1000XM5', sourceIndex: 0, summary: 'Daha düşük Bluetooth gecikmesi ve daha net mikrofon.', pros: ['Düşük gecikmeli codec\'ler', 'Net mikrofon'], cons: ['Bose\'a göre daha az pasif yalıtım'], bestFor: 'oyun ve sesli sohbet' },
+          { name: 'Bose QuietComfort Ultra', sourceIndex: 1, summary: 'Sınıfının en iyi pasif yalıtımı ama daha yüksek kablosuz gecikme.', pros: ['En sıkı yalıtım'], cons: ['Yüksek Bluetooth gecikmesi'], bestFor: 'uçuş ve ofis' },
+        ],
+        winner: 'Sony WH-1000XM5',
+        verdict: 'Oyun için Sony WH-1000XM5 — düşük gecikme ve iyi mikrofon onu daha güvenli seçim yapıyor.',
+      },
+    };
+  }
+  return {
+    mode: 'price',
+    text: 'Sony for gaming — lower latency and a better mic make it the safer pick.',
+    hasVisual: false,
+    comparison: {
+      items: [
+        { name: 'Sony WH-1000XM5', sourceIndex: 0, summary: 'Lower-latency Bluetooth and clearer mic.', pros: ['Low-latency codecs', 'Clear mic for voice chat'], cons: ['Less passive isolation than Bose'], bestFor: 'gaming and voice chat' },
+        { name: 'Bose QuietComfort Ultra', sourceIndex: 1, summary: 'Best-in-class passive isolation but more wireless lag.', pros: ['Tightest seal and isolation'], cons: ['Higher Bluetooth latency'], bestFor: 'flights and offices' },
+      ],
+      winner: 'Sony WH-1000XM5',
+      verdict: 'Sony WH-1000XM5 for gaming — lower latency and a better mic make it the safer pick.',
+    },
+  };
+}
+
 export function mockResponse(mode: Mode, lang: Lang, message: string): StandardResponse {
   const resolved: Mode = mode === 'auto' ? inferMode(message) : mode;
 
   if (resolved === 'fashion') {
+    const slots = ['outerwear', 'top', 'bottom', 'top', 'bag', 'accessory'];
     return {
       mode: 'fashion',
       text: lang === 'tr'
         ? 'Bej bir trençkot etrafında — nötr, rahat, sıcak bir aksanla. Altı parçalık bir öneri.'
         : 'Built around a stone trench coat — neutral, off-duty, with one warm accent. Here\'s a six-piece take.',
       identifiedItem: { name: lang === 'tr' ? 'Bej trençkot' : 'Stone trench coat', type: 'coat', style: 'minimalist' },
-      suggestions: mockProducts('fashion', lang).map(p => ({ name: p.name, searchQuery: p.name })),
+      suggestions: mockProducts('fashion', lang).map((p, i) => ({ name: p.name, searchQuery: p.name, swapSlot: slots[i] || 'accessory' })),
       hasVisual: true,
       imagePrompt: 'Minimalist white background flat lay fashion photo. Styled outfit including: stone trench coat, white poplin shirt, black wool trouser, camel cashmere knit, cognac leather tote, silk scarf. Editorial, no text.',
       retailers: mockProducts('fashion', lang),
+      prefsSummary: lang === 'tr' ? 'minimalist nötr, sıcak aksan, kadın günlük' : 'minimalist neutrals, warm accent, womens off-duty',
     };
   }
   if (resolved === 'home') {
@@ -112,6 +145,51 @@ export function mockResponse(mode: Mode, lang: Lang, message: string): StandardR
     identifiedItem: { name: lang === 'tr' ? 'Sneaker' : 'Common Projects Achilles Low', type: 'sneaker' },
     hasVisual: false,
     retailers: mockProducts(resolved, lang),
+    verdict: lang === 'tr'
+      ? 'Mr Porter ücretsiz kargo + en düşük fiyat — bu hafta açık ara en iyi alım.'
+      : 'Mr Porter — free shipping plus the lowest price makes this the clear pick this week.',
+    reviewSummary: {
+      rating: 4.6,
+      sampleSize: 318,
+      pros: lang === 'tr'
+        ? ['Premium deri kalitesi', 'Yıllar boyunca eskimeyen siluet']
+        : ['Premium leather quality', 'Silhouette ages well'],
+      cons: lang === 'tr' ? ['Tabanı sert geliyor'] : ['Sole runs firm'],
+    },
+  };
+}
+
+export function mockDupeFinder(lang: Lang): StandardResponse {
+  return {
+    mode: 'price',
+    text: lang === 'tr'
+      ? 'Aynı sade siluetin daha hesaplı 3 muadili — derinin yerini kanvas/tekstil alıyor, fiyat üçte birine kadar düşüyor.'
+      : 'Three cheaper look-alikes — canvas/textile in place of leather, down to roughly a third of the price.',
+    identifiedItem: { name: lang === 'tr' ? 'Beyaz minimal sneaker' : 'White minimal sneaker', type: 'sneaker' },
+    hasVisual: false,
+    suggestions: [
+      {
+        name: lang === 'tr' ? 'Beyaz kanvas low-top' : 'White canvas low-top',
+        searchQuery: lang === 'tr' ? 'beyaz kanvas low-top sneaker' : 'white canvas low-top sneaker',
+        reason: lang === 'tr' ? 'aynı sade siluet, kanvas — ~%60 daha uygun' : 'same clean silhouette, canvas — ~60% cheaper',
+        dupeOf: 0,
+      },
+      {
+        name: lang === 'tr' ? 'Beyaz mikrofiber sneaker' : 'White microfiber sneaker',
+        searchQuery: lang === 'tr' ? 'beyaz mikrofiber sneaker' : 'white microfiber sneaker',
+        reason: lang === 'tr' ? 'deri görünümü, vegan, ~%40 daha uygun' : 'leather look, vegan, ~40% cheaper',
+        dupeOf: 0,
+      },
+      {
+        name: lang === 'tr' ? 'Beyaz tekstil retro sneaker' : 'White textile retro sneaker',
+        searchQuery: lang === 'tr' ? 'beyaz retro sneaker tekstil' : 'white retro textile sneaker',
+        reason: lang === 'tr' ? 'biraz daha sportif ama benzer ton' : 'slightly sportier but same tonal palette',
+        dupeOf: 0,
+      },
+    ],
+    verdict: lang === 'tr'
+      ? 'Hızlı eskimeyen bir görünüm istiyorsan kanvas low-top — fiyat/performans en yüksek.'
+      : 'Go canvas low-top — best value if you want the look without leather upkeep.',
   };
 }
 

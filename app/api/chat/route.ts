@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geminiClient, GEMINI_TEXT_MODEL, PROMPTS, RESPONSE_SCHEMA } from '@/lib/gemini';
-import { mockResponse } from '@/lib/mocks';
 import type { Budget, Gender, Lang, Mode, ResolvedProduct, Message } from '@/lib/types';
 import { buildContextPreamble } from '@/lib/preamble';
 
@@ -9,12 +8,42 @@ export const runtime = 'nodejs';
 type Body = {
   message: string;
   resolvedProduct?: ResolvedProduct;
+  resolvedProducts?: ResolvedProduct[];
   mode: Mode;
   chatHistory?: Message[];
   language: Lang;
   gender?: Gender | null;
   budget?: Budget | null;
+  prefsSummary?: string | null;
 };
+
+type ApiErrorBody = {
+  error: 'missing_api_key' | 'rate_limited' | 'provider_denied' | 'provider_unavailable' | 'invalid_response';
+  provider: 'gemini';
+  status: number;
+  retryable: boolean;
+};
+
+function providerError(status: number, error: ApiErrorBody['error'], retryable: boolean) {
+  return NextResponse.json<ApiErrorBody>(
+    { error, provider: 'gemini', status, retryable },
+    { status },
+  );
+}
+
+function mapGeminiError(err: unknown) {
+  const status =
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof (err as { status?: unknown }).status === 'number'
+      ? (err as { status: number }).status
+      : 503;
+
+  if (status === 429) return providerError(429, 'rate_limited', true);
+  if (status === 403) return providerError(403, 'provider_denied', false);
+  return providerError(status >= 400 ? status : 503, 'provider_unavailable', true);
+}
 
 export async function POST(req: NextRequest) {
   let body: Body;
@@ -23,12 +52,17 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  const { message, resolvedProduct, mode = 'auto', language = 'en', chatHistory = [], gender = null, budget = null } = body;
+  const { message, resolvedProduct, resolvedProducts, mode = 'auto', language = 'en', chatHistory = [], gender = null, budget = null, prefsSummary = null } = body;
+  const resolved: ResolvedProduct[] = resolvedProducts && resolvedProducts.length
+    ? resolvedProducts
+    : resolvedProduct
+    ? [resolvedProduct]
+    : [];
 
   const client = geminiClient();
   if (!client) {
     console.warn('[api/chat] GEMINI_API_KEY not set → mock response');
-    return NextResponse.json(mockResponse(mode, language, message));
+    return providerError(503, 'missing_api_key', false);
   }
 
   try {
@@ -55,10 +89,30 @@ export async function POST(req: NextRequest) {
       }));
 
     const userParts: string[] = [];
-    const preamble = buildContextPreamble(gender, budget, language);
+    const preamble = buildContextPreamble(gender, budget, language, prefsSummary);
     if (preamble) userParts.push(preamble);
 
     const lastAi = [...chatHistory].reverse().find((m) => m.role === 'ai');
+    const priorComparison = lastAi?.response?.comparison;
+    const priorSuggestionsByIdx = lastAi?.response?.suggestions?.filter((s) => typeof s.sourceIndex === 'number');
+    if (priorComparison?.items?.length || (priorSuggestionsByIdx && priorSuggestionsByIdx.length)) {
+      const lines: string[] = ['PRIOR PRODUCT CONTEXT (from the previous AI turn — use this when the user references items by ordinal/position):'];
+      if (priorComparison?.items?.length) {
+        priorComparison.items.forEach((it, i) => {
+          const idx = typeof it.sourceIndex === 'number' ? it.sourceIndex : i;
+          lines.push(`  [${idx + 1}] ${it.name}${it.bestFor ? ` — best for: ${it.bestFor}` : ''}${it.summary ? ` — ${it.summary}` : ''}`);
+        });
+        if (priorComparison.winner) lines.push(`  Prior winner: ${priorComparison.winner}`);
+        if (priorComparison.verdict) lines.push(`  Prior verdict: ${priorComparison.verdict}`);
+      }
+      if (priorSuggestionsByIdx && priorSuggestionsByIdx.length) {
+        priorSuggestionsByIdx.forEach((s) => {
+          lines.push(`  [${(s.sourceIndex ?? 0) + 1}] ${s.name}${s.searchQuery ? ` (q: ${s.searchQuery})` : ''}`);
+        });
+      }
+      const block = lines.join('\n');
+      userParts.push(block.length > 1500 ? block.slice(0, 1500) + '…' : block);
+    }
     const priorClarify = lastAi?.response?.clarify;
     if (priorClarify?.groups?.length) {
       const summary = priorClarify.groups
@@ -69,18 +123,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const urlMatch = message.match(/https?:\/\/\S+/);
-    if (resolvedProduct) {
-      userParts.push(`PRODUCT LINK SUCCESSFULLY FETCHED. Resolved product data:\nTitle: ${resolvedProduct.title}`);
-      if (resolvedProduct.image) userParts.push(`Image URL: ${resolvedProduct.image}`);
-      if (resolvedProduct.jsonLd) userParts.push(`Structured data (JSON-LD): ${JSON.stringify(resolvedProduct.jsonLd).slice(0, 2000)}`);
+    const urlMatches = message.match(/https?:\/\/\S+/g) ?? [];
+    const urlMatch = urlMatches[0];
+    if (resolved.length > 0) {
+      const multi = resolved.length > 1;
       userParts.push(
-        `REQUIRED — use this resolved data; do NOT invent product details. ` +
-        `Your \`text\` response MUST reference the actual product (its type, color, or distinctive name from the title) so the user can tell you read the page. ` +
-        (language === 'tr'
-          ? `Example: "Trivium baskılı siyah kadın tişörtün etrafında günlük bir kombin oluşturdum: …" — NOT "Bu tişörtle bir kombin oluşturalım".`
-          : `Example: "I built a casual look around your Trivium-print black women's tee: …" — NOT "Let's build an outfit with this t-shirt".`),
+        multi
+          ? `MULTIPLE PRODUCT LINKS SUCCESSFULLY FETCHED (${resolved.length} items). Refer to them by ordinal position (1st, 2nd, …) and by their actual names — never blend them into one product.`
+          : `PRODUCT LINK SUCCESSFULLY FETCHED. Resolved product data:`,
       );
+      resolved.forEach((p, i) => {
+        const idx = multi ? `[Product ${i + 1}] ` : '';
+        userParts.push(`${idx}Title: ${p.title}`);
+        if (p.sourceUrl) userParts.push(`${idx}Source URL: ${p.sourceUrl}`);
+        if (p.image) userParts.push(`${idx}Image URL: ${p.image}`);
+        if (p.jsonLd) userParts.push(`${idx}Structured data (JSON-LD): ${JSON.stringify(p.jsonLd).slice(0, 1500)}`);
+      });
+      if (multi) {
+        userParts.push(
+          `REQUIRED — for MULTI_ITEM intent set \`sourceIndex\` (0-based) on every \`suggestions[]\` and \`comparison.items[]\` entry to map back to which user product it refers to.`,
+        );
+      } else {
+        userParts.push(
+          `REQUIRED — use this resolved data; do NOT invent product details. ` +
+          `Your \`text\` response MUST reference the actual product (its type, color, or distinctive name from the title) so the user can tell you read the page. ` +
+          (language === 'tr'
+            ? `Example: "Trivium baskılı siyah kadın tişörtün etrafında günlük bir kombin oluşturdum: …" — NOT "Bu tişörtle bir kombin oluşturalım".`
+            : `Example: "I built a casual look around your Trivium-print black women's tee: …" — NOT "Let's build an outfit with this t-shirt".`),
+        );
+      }
     } else if (urlMatch) {
       userParts.push(
         `IMPORTANT — LINK COULD NOT BE FETCHED: The user pasted a URL (${urlMatch[0]}) but we could NOT access the page. You have ZERO information about what the actual product looks like beyond what the user typed in their message. Do NOT pretend you analyzed the link.\n\n` +
@@ -129,10 +200,10 @@ export async function POST(req: NextRequest) {
     } catch (parseErr) {
       console.error('[api/chat] JSON parse failed; raw text was:\n', text);
       console.error('[api/chat] parse error:', parseErr);
-      return NextResponse.json(mockResponse(mode, language, message));
+      return providerError(502, 'invalid_response', true);
     }
   } catch (err) {
     console.error('[api/chat] Gemini error → falling back to mock:', err);
-    return NextResponse.json(mockResponse(mode, language, message));
+    return mapGeminiError(err);
   }
 }

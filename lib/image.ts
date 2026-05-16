@@ -40,9 +40,13 @@ export function isUrl(text: string): boolean {
   return URL_RE.test(text.trim());
 }
 
-const URL_EXTRACT_RE = /https?:\/\/[^\s]+/i;
+const URL_EXTRACT_RE = /https?:\/\/[^\s]+/gi;
+export function extractUrls(text: string): string[] {
+  const matches = text.match(URL_EXTRACT_RE);
+  if (!matches) return [];
+  const cleaned = matches.map((u) => u.replace(/[),.;!?]+$/, ''));
+  return Array.from(new Set(cleaned));
+}
 export function extractUrl(text: string): string | null {
-  const match = text.match(URL_EXTRACT_RE);
-  if (!match) return null;
-  return match[0].replace(/[),.;!?]+$/, '');
+  return extractUrls(text)[0] ?? null;
 }

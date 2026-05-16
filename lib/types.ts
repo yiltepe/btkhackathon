@@ -20,6 +20,9 @@ export type IdentifiedItem = {
   color?: string;
   style?: string;
   material?: string;
+  size?: string;
+  fit?: string;
+  occasion?: string;
 };
 
 export type Suggestion = {
@@ -29,6 +32,31 @@ export type Suggestion = {
   visualDescription?: string;
   color?: string;
   reason?: string;
+  sourceIndex?: number;
+  swapSlot?: string;
+  dupeOf?: number;
+};
+
+export type ReviewSummary = {
+  rating?: number;
+  sampleSize?: number;
+  pros?: string[];
+  cons?: string[];
+};
+
+export type ComparisonItem = {
+  name: string;
+  summary: string;
+  pros?: string[];
+  cons?: string[];
+  bestFor?: string;
+  sourceIndex?: number;
+};
+
+export type Comparison = {
+  items: ComparisonItem[];
+  winner?: string;
+  verdict: string;
 };
 
 export type StandardResponse = {
@@ -40,13 +68,21 @@ export type StandardResponse = {
   imagePrompt?: string;
   retailers?: Product[];
   clarify?: Clarify;
+  comparison?: Comparison;
+  verdict?: string;
+  crossSell?: Suggestion[];
+  reviewSummary?: ReviewSummary;
+  prefsSummary?: string;
 };
 
 export type ResolvedProduct = {
   title: string;
   image?: string;
   jsonLd?: Record<string, unknown>;
+  sourceUrl?: string;
 };
+
+export type Attachment = { kind: 'image' | 'link'; preview?: string; label?: string };
 
 export type Message = {
   id: string;
@@ -55,7 +91,10 @@ export type Message = {
   kind?: 'price' | 'fashion' | 'home' | 'electronics' | 'beauty';
   response?: StandardResponse;
   products?: Product[];
-  attachment?: { kind: 'image' | 'link'; preview?: string; label?: string };
+  productsByIndex?: { sourceIndex: number; label: string; items: Product[] }[];
+  attachment?: Attachment;
+  attachments?: Attachment[];
+  resolvedProducts?: ResolvedProduct[];
 };
 
 export type Chat = {

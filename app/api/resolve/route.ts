@@ -65,6 +65,47 @@ async function fetchWithTimeout(url: string, ms: number, headers: Record<string,
   }
 }
 
+function trimProductJsonLd(product: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const keep = ['@type', 'name', 'brand', 'category', 'description', 'sku', 'mpn', 'color', 'material', 'size', 'offers'];
+  for (const k of keep) {
+    if (product[k] !== undefined) out[k] = product[k];
+  }
+  const agg = product['aggregateRating'];
+  if (agg && typeof agg === 'object') {
+    const a = agg as Record<string, unknown>;
+    const rating = Number(a['ratingValue']);
+    const count = Number(a['reviewCount'] ?? a['ratingCount']);
+    if (!Number.isNaN(rating)) {
+      out.aggregateRating = {
+        ratingValue: rating,
+        ...(Number.isNaN(count) ? {} : { reviewCount: count }),
+      };
+    }
+  }
+  const reviews = product['review'];
+  if (Array.isArray(reviews) && reviews.length) {
+    const snippets = reviews
+      .slice(0, 3)
+      .map((r) => {
+        if (!r || typeof r !== 'object') return null;
+        const rev = r as Record<string, unknown>;
+        const body = typeof rev['reviewBody'] === 'string' ? (rev['reviewBody'] as string) : '';
+        const stars = rev['reviewRating'] && typeof rev['reviewRating'] === 'object'
+          ? Number((rev['reviewRating'] as Record<string, unknown>)['ratingValue'])
+          : NaN;
+        if (!body) return null;
+        return {
+          reviewBody: body.slice(0, 200),
+          ...(Number.isNaN(stars) ? {} : { ratingValue: stars }),
+        };
+      })
+      .filter(Boolean);
+    if (snippets.length) out.review = snippets;
+  }
+  return out;
+}
+
 async function tryDirect(url: string) {
   const res = await fetchWithTimeout(url, 9000, BROWSER_HEADERS);
   if (!res.ok) return null;
@@ -100,7 +141,7 @@ async function tryDirect(url: string) {
         if (Array.isArray(graph)) queue.push(...graph);
       }
       const product = candidates.find(isProduct);
-      if (product) jsonLd = product;
+      if (product) jsonLd = trimProductJsonLd(product);
     } catch {
       /* ignore */
     }

@@ -2,6 +2,19 @@ import type { Budget, Gender, Lang } from './types';
 
 export const GENDER_KEY = 'oben:gender';
 export const BUDGET_KEY = 'oben:budget';
+export const PREFS_SUMMARY_KEY = 'oben:prefs-summary';
+
+export function loadPrefsSummary(): string {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(PREFS_SUMMARY_KEY) || '';
+}
+
+export function savePrefsSummary(s: string): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = (s || '').slice(0, 200).trim();
+  if (trimmed) window.localStorage.setItem(PREFS_SUMMARY_KEY, trimmed);
+  else window.localStorage.removeItem(PREFS_SUMMARY_KEY);
+}
 
 export function loadGender(): Gender | null {
   if (typeof window === 'undefined') return null;

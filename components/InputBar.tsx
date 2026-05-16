@@ -12,23 +12,26 @@ export default function InputBar({
   onSend,
   onAttach,
   onClearFile,
-  pendingFilePreview,
+  pendingFilePreviews,
   lang,
   resolving,
   budget,
   onBudgetChange,
+  attachLimitNote,
 }: {
   value: string;
   setValue: (v: string) => void;
   onSend: () => void;
   onAttach: (file: File) => void;
-  onClearFile?: () => void;
-  pendingFilePreview?: string;
+  onClearFile?: (index?: number) => void;
+  pendingFilePreviews?: string[];
   lang: Lang;
   resolving?: boolean;
   budget: Budget;
   onBudgetChange: (b: Budget) => void;
+  attachLimitNote?: string;
 }) {
+  const hasPreviews = !!pendingFilePreviews && pendingFilePreviews.length > 0;
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -52,31 +55,43 @@ export default function InputBar({
           position: 'relative',
         }}
       >
-        {pendingFilePreview && (
-          <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={pendingFilePreview}
-              alt=""
-              style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--line)' }}
-            />
-            <button
-              onClick={onClearFile}
-              title="Remove"
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: '50%',
-                background: 'var(--muted-2)',
-                color: '#fff',
-                fontSize: 12,
-                display: 'grid',
-                placeItems: 'center',
-                lineHeight: 1,
-              }}
-            >
-              ×
-            </button>
+        {hasPreviews && (
+          <div style={{ padding: '8px 12px 0', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {pendingFilePreviews!.map((src, i) => (
+              <div key={i} style={{ position: 'relative' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--line)', display: 'block' }}
+                />
+                <button
+                  onClick={() => onClearFile?.(i)}
+                  title="Remove"
+                  style={{
+                    position: 'absolute',
+                    top: -6,
+                    right: -6,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: 'var(--muted-2)',
+                    color: '#fff',
+                    fontSize: 11,
+                    display: 'grid',
+                    placeItems: 'center',
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {attachLimitNote && (
+          <div style={{ padding: '4px 12px 0', fontSize: 11.5, color: 'var(--accent)', letterSpacing: '-.005em' }}>
+            {attachLimitNote}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 12px' }}>
@@ -128,10 +143,13 @@ export default function InputBar({
               ref={fileRef}
               type="file"
               accept="image/*"
+              multiple
               hidden
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) onAttach(f);
+                const list = e.target.files;
+                if (list) {
+                  for (let i = 0; i < list.length; i++) onAttach(list[i]);
+                }
                 e.currentTarget.value = '';
               }}
             />
@@ -154,15 +172,15 @@ export default function InputBar({
             <button
               title={t('chat.send', lang)}
               onClick={onSend}
-              disabled={(!value.trim() && !pendingFilePreview) || !!resolving}
+              disabled={(!value.trim() && !hasPreviews) || !!resolving}
               style={{
                 width: 32,
                 height: 32,
                 display: 'grid',
                 placeItems: 'center',
                 borderRadius: 4,
-                background: (value.trim() || pendingFilePreview) && !resolving ? 'var(--accent)' : '#E5E5E5',
-                color: (value.trim() || pendingFilePreview) && !resolving ? '#FAFAF8' : '#9A9A93',
+                background: (value.trim() || hasPreviews) && !resolving ? 'var(--accent)' : '#E5E5E5',
+                color: (value.trim() || hasPreviews) && !resolving ? '#FAFAF8' : '#9A9A93',
                 transition: 'background .14s',
               }}
             >

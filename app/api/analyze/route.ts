@@ -1,20 +1,53 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { geminiClient, GEMINI_TEXT_MODEL, PROMPTS, RESPONSE_SCHEMA } from '@/lib/gemini';
-import { mockResponse } from '@/lib/mocks';
-import type { Budget, Gender, Lang, Mode } from '@/lib/types';
+import type { Budget, Gender, Lang, Message, Mode } from '@/lib/types';
 import { buildContextPreamble } from '@/lib/preamble';
 
 export const runtime = 'nodejs';
 
+type ImageInput = { base64: string; mimeType: string };
+
 type Body = {
-  imageBase64: string;
-  mimeType: string;
+  imageBase64?: string;
+  mimeType?: string;
+  images?: ImageInput[];
   mode: Mode;
   language: Lang;
   message?: string;
   gender?: Gender | null;
   budget?: Budget | null;
+  chatHistory?: Message[];
 };
+
+type ApiErrorBody = {
+  error: 'missing_api_key' | 'rate_limited' | 'provider_denied' | 'provider_unavailable' | 'invalid_response';
+  provider: 'gemini';
+  status: number;
+  retryable: boolean;
+};
+
+function providerError(status: number, error: ApiErrorBody['error'], retryable: boolean) {
+  return NextResponse.json<ApiErrorBody>(
+    { error, provider: 'gemini', status, retryable },
+    { status },
+  );
+}
+
+function mapGeminiError(err: unknown) {
+  const status =
+    typeof err === 'object' &&
+    err !== null &&
+    'status' in err &&
+    typeof (err as { status?: unknown }).status === 'number'
+      ? (err as { status: number }).status
+      : 503;
+
+  if (status === 429) return providerError(429, 'rate_limited', true);
+  if (status === 403) return providerError(403, 'provider_denied', false);
+  return providerError(status >= 400 ? status : 503, 'provider_unavailable', true);
+}
+
+const SIMILAR_CUE = /\b(similar|like this|find similar|benzeri|buna benzer|benzer bul)\b/i;
 
 export async function POST(req: NextRequest) {
   let body: Body;
@@ -23,11 +56,21 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  const { imageBase64, mimeType, mode = 'auto', language = 'en', message, gender = null, budget = null } = body;
+  const { imageBase64, mimeType, images, mode = 'auto', language = 'en', message, gender = null, budget = null, chatHistory = [] } = body;
+
+  const imageList: ImageInput[] = images && images.length
+    ? images
+    : imageBase64
+    ? [{ base64: imageBase64, mimeType: mimeType || 'image/jpeg' }]
+    : [];
+
+  if (imageList.length === 0) {
+    return NextResponse.json({ error: 'no_image' }, { status: 400 });
+  }
 
   const client = geminiClient();
   if (!client) {
-    return NextResponse.json(mockResponse(mode, language, '[image]'));
+    return providerError(503, 'missing_api_key', false);
   }
 
   try {
@@ -42,25 +85,52 @@ export async function POST(req: NextRequest) {
     });
 
     const preamble = buildContextPreamble(gender, budget, language);
-    const parts = [preamble, message ?? ''].filter(Boolean);
+    const isSimilar = !!message && SIMILAR_CUE.test(message);
+    const multi = imageList.length > 1;
+    const extras: string[] = [];
+    if (multi) {
+      extras.push(
+        `MULTIPLE IMAGES ATTACHED (${imageList.length}). YOU MUST USE INTENT F (MULTI_ITEM). The user is talking about these ${imageList.length} items, not asking for an outfit — do NOT pick INTENT C (BUILD_OUTFIT) under any circumstance. Refer to images by ordinal position (1st, 2nd, …). Set \`sourceIndex\` (0-based) on every \`suggestions[]\` and \`comparison.items[]\` entry. For each image, identify any visible brand logo/wordmark/distinctive feature and put it in the item's \`name\` (e.g. "Adidas Samba", "Nike Air Force 1") — do NOT leave brand blank when it is visually identifiable.`,
+      );
+    }
+    const priorAi = [...chatHistory].reverse().find((m) => m.role === 'ai');
+    const priorComparison = priorAi?.response?.comparison;
+    const priorIdentified = priorAi?.response?.identifiedItem;
+    if (priorComparison?.items?.length) {
+      const lines = ['PRIOR PRODUCT CONTEXT (from the previous AI turn — use this when the user references items by ordinal):'];
+      priorComparison.items.forEach((it, i) => {
+        const idx = typeof it.sourceIndex === 'number' ? it.sourceIndex : i;
+        lines.push(`  [${idx + 1}] ${it.name}${it.bestFor ? ` — best for: ${it.bestFor}` : ''}${it.summary ? ` — ${it.summary}` : ''}`);
+      });
+      if (priorComparison.verdict) lines.push(`  Prior verdict: ${priorComparison.verdict}`);
+      const block = lines.join('\n');
+      extras.push(block.length > 1500 ? block.slice(0, 1500) + '…' : block);
+    } else if (priorIdentified?.name) {
+      extras.push(`PRIOR PRODUCT CONTEXT: previous turn identified "${priorIdentified.name}"${priorIdentified.type ? ` (${priorIdentified.type})` : ''}.`);
+    }
+    if (isSimilar) {
+      extras.push(
+        `VISUAL-SIMILARITY MODE: the user wants items that LOOK LIKE the attached image(s). Populate \`suggestions[].searchQuery\` with a tight visual descriptor (color + material + product type, ≤6 words) — do NOT use brand or model names.`,
+      );
+    }
+    const parts = [preamble, ...extras, message ?? ''].filter(Boolean);
     const promptText = parts.join('\n\n');
 
     console.log('\n========== [api/analyze] GEMINI REQUEST ==========');
     console.log('Model:', GEMINI_TEXT_MODEL, '| mode:', mode, '| lang:', language);
     console.log('--- System Instruction ---');
     console.log(PROMPTS[mode][language]);
-    console.log('--- Image ---');
-    console.log(`mimeType: ${mimeType || 'image/jpeg'} | base64 length: ${imageBase64?.length ?? 0}`);
+    console.log('--- Images ---');
+    imageList.forEach((img, i) => console.log(`[${i}] mimeType: ${img.mimeType} | base64 length: ${img.base64.length}`));
     console.log('--- Prompt Text ---');
     console.log(promptText);
     console.log('==================================================\n');
 
-    const result = await model.generateContent([
-      {
-        inlineData: { data: imageBase64, mimeType: mimeType || 'image/jpeg' },
-      },
+    const contentParts = [
+      ...imageList.map((img) => ({ inlineData: { data: img.base64, mimeType: img.mimeType } })),
       { text: promptText },
-    ]);
+    ];
+    const result = await model.generateContent(contentParts);
     const text = result.response.text();
     const usage = result.response.usageMetadata;
     console.log('========== [api/analyze] GEMINI RESPONSE ==========');
@@ -78,10 +148,10 @@ export async function POST(req: NextRequest) {
     } catch (parseErr) {
       console.error('[api/analyze] JSON parse failed; raw text was:\n', text);
       console.error('[api/analyze] parse error:', parseErr);
-      return NextResponse.json(mockResponse(mode, language, '[image]'));
+      return providerError(502, 'invalid_response', true);
     }
   } catch (err) {
     console.error('[api/analyze] Gemini error → falling back to mock:', err);
-    return NextResponse.json(mockResponse(mode, language, '[image]'));
+    return mapGeminiError(err);
   }
 }
