@@ -103,6 +103,7 @@ export type Chat = {
   messages: Message[];
   createdAt: number;
   lang: Lang;
+  prefsSummary?: string;
 };
 
 export type CartItem = {

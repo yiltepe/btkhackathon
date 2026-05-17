@@ -1,22 +1,26 @@
 import type { Chat, Message, Lang } from './types';
 
-const KEY = 'oben:chats';
+const BASE = 'oben:chats';
 const CAP = 20;
 
-export function loadChats(): Chat[] {
+function key(uid?: string | null): string {
+  return uid ? `${BASE}:${uid}` : BASE;
+}
+
+export function loadChats(uid?: string | null): Chat[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(key(uid));
     return raw ? (JSON.parse(raw) as Chat[]) : [];
   } catch {
     return [];
   }
 }
 
-export function saveChats(chats: Chat[]): void {
+export function saveChats(chats: Chat[], uid?: string | null): void {
   if (typeof window === 'undefined') return;
   const capped = chats.slice(0, CAP);
-  window.localStorage.setItem(KEY, JSON.stringify(capped));
+  window.localStorage.setItem(key(uid), JSON.stringify(capped));
 }
 
 export function makeChat(firstMessage: Message, lang: Lang): Chat {

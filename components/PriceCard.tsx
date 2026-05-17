@@ -130,7 +130,10 @@ export default function PriceCard({
   lang: Lang;
 }) {
   if (retailers.length === 0) return null;
-  const lowest = retailers.find((r) => r.price !== null) ?? retailers[0];
+  const priced = retailers.filter((r) => r.price !== null);
+  const lowest = priced.length
+    ? priced.reduce((min, r) => ((r.price as number) < (min.price as number) ? r : min))
+    : retailers[0];
   return (
     <div
       style={{

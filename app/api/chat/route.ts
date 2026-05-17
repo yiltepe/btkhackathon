@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { geminiClient, GEMINI_TEXT_MODEL, PROMPTS, RESPONSE_SCHEMA } from '@/lib/gemini';
 import type { Budget, Gender, Lang, Mode, ResolvedProduct, Message } from '@/lib/types';
 import { buildContextPreamble } from '@/lib/preamble';
+import { serperWebSnippets, hasSearch } from '@/lib/search';
+
+const SPEC_QUESTION_CUE = /\b(spec|specs|specification|specifications|feature|features|color|colour|colors|colours|colorway|options?|variant|version|battery|ram|storage|weight|dimension|resolution|refresh rate|warranty|review|reviews|compatible|compatibility|support|performance|benchmark|differences?|vs\.?|versus|compared?|which is better|good for|worth it|reliable|how (?:much|long|fast|big)|what (?:is|are|does)|available in|comes in|özellik|özellikler|teknik|batarya|pil|ekran|işlemci|kapasite|garanti|inceleme|yorum|uyumlu|destek|karşılaştır|kıyasla|fark|farkları?|hangisi|daha iyi mi|nasıl|ne kadar|kaç (?:gb|saat|inç|cm)|renk|renkleri?|renkler|seçenek|seçenekler|varyant|versiyon|nedir|neler|hangileri)\b/i;
 
 export const runtime = 'nodejs';
 
@@ -166,6 +169,35 @@ export async function POST(req: NextRequest) {
         `4. Only ask the user to describe the item if their message contains absolutely zero hint about what it is.`,
       );
     }
+    const productAnchorName =
+      resolved[0]?.title ||
+      lastAi?.response?.identifiedItem?.name ||
+      lastAi?.response?.comparison?.items?.[0]?.name ||
+      null;
+    const looksLikeSpecQuestion = SPEC_QUESTION_CUE.test(message);
+    if (looksLikeSpecQuestion && hasSearch()) {
+      try {
+        const q = productAnchorName
+          ? `${productAnchorName} ${message}`
+          : message;
+        const cleaned = q.replace(/\s+/g, ' ').trim().slice(0, 200);
+        const snippets = await serperWebSnippets(cleaned, language, 6);
+        if (snippets.length) {
+          const lines = ['WEB SEARCH RESULTS (use these as GROUND TRUTH for specs / features / colors / variants / comparisons — quote concrete attributes from them, do NOT invent. If the user asked for color options, list every distinct color name you can read from these snippets):'];
+          snippets.forEach((s, i) => {
+            lines.push(`  [${i + 1}] ${s.title}${s.source ? ` (${s.source})` : ''}: ${s.snippet.slice(0, 320)}`);
+          });
+          userParts.push(lines.join('\n'));
+          userParts.push(
+            `SPEC-QUESTION ROUTING: The user is asking about characteristics of a product (specs, colors, variants, features, comparison). Pick INTENT E (PRODUCT_QA). Set \`mode\`="chitchat", \`hasVisual\`=false, OMIT \`suggestions\` and \`retailers\`. Answer the question directly in \`text\` using the WEB SEARCH RESULTS above. Do NOT return a price comparison.`,
+          );
+          console.log(`[api/chat] injected ${snippets.length} web snippets for spec question (anchor: ${productAnchorName ?? 'from-message'})`);
+        }
+      } catch (snippetErr) {
+        console.warn('[api/chat] web snippet fetch failed:', snippetErr);
+      }
+    }
+
     userParts.push(`User message: ${message}`);
 
     const chat = model.startChat({ history });
@@ -196,6 +228,13 @@ export async function POST(req: NextRequest) {
 
     try {
       const parsed = JSON.parse(text);
+      if (Array.isArray(parsed.suggestions)) {
+        for (const s of parsed.suggestions) {
+          if (typeof s.visualDescription === 'string' && s.visualDescription.length > 120) {
+            s.visualDescription = s.visualDescription.split(/[.,;]/)[0].trim().slice(0, 100);
+          }
+        }
+      }
       return NextResponse.json(parsed);
     } catch (parseErr) {
       console.error('[api/chat] JSON parse failed; raw text was:\n', text);

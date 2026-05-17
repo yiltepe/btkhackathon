@@ -48,6 +48,7 @@ function mapGeminiError(err: unknown) {
 }
 
 const SIMILAR_CUE = /\b(similar|like this|find similar|benzeri|buna benzer|benzer bul)\b/i;
+const EXACT_CUE = /\b(exact|this exact|find this exact|same one|the same|aynısı|aynısını|tam olarak bunu|bunu bul|bunun aynısı)\b/i;
 
 export async function POST(req: NextRequest) {
   let body: Body;
@@ -86,6 +87,8 @@ export async function POST(req: NextRequest) {
 
     const preamble = buildContextPreamble(gender, budget, language);
     const isSimilar = !!message && SIMILAR_CUE.test(message);
+    const isExact = !!message && !isSimilar && EXACT_CUE.test(message);
+    const isEmptyMessage = !message || !message.trim();
     const multi = imageList.length > 1;
     const extras: string[] = [];
     if (multi) {
@@ -111,6 +114,14 @@ export async function POST(req: NextRequest) {
     if (isSimilar) {
       extras.push(
         `VISUAL-SIMILARITY MODE: the user wants items that LOOK LIKE the attached image(s). Populate \`suggestions[].searchQuery\` with a tight visual descriptor (color + material + product type, ≤6 words) — do NOT use brand or model names.`,
+      );
+    } else if (isExact) {
+      extras.push(
+        `EXACT-MATCH MODE: the user wants the SAME item shown in the image. Inspect the photo for any visible brand logo, wordmark, model name, distinctive print, or signature design feature, and identify color, material, and product type. Put the brand in \`identifiedItem.name\` and \`identifiedItem\` fields. Each \`suggestions[].searchQuery\` MUST be retailer-friendly and combine \`brand + product type + color\` (≤5 words). If no brand is visually identifiable, fall back to \`color + material + product type\` and say so in \`text\`. \`mode\`="price". Output 1–3 suggestions for that one item. Do NOT build an outfit.`,
+      );
+    } else if (isEmptyMessage && !multi) {
+      extras.push(
+        `OUTFIT DECOMPOSITION MODE: a single image was attached with no text. If the photo shows a person wearing multiple clothing items, treat it as an outfit-decomposition request: identify EVERY visible clothing/accessory piece (top, bottom, outerwear, shoes, bag, hat, jewelry, etc.) and emit ONE \`suggestions[]\` entry per piece — find the EXACT item for each. For each piece, inspect for visible brand logos/wordmarks/distinctive features and bake \`brand + product type + color\` into the \`searchQuery\` (≤5 words). If no brand is visible for a piece, use \`color + material + product type\`. Set \`mode\`="price", \`hasVisual\`=false, omit \`imagePrompt\`. \`identifiedItem\` describes the overall look. Each suggestion gets a short \`reason\` naming which piece it is ("the top", "the shoes"). If the photo shows only ONE clothing item (a single product shot, not a person), treat it as a single FIND_ITEM instead.`,
       );
     }
     const parts = [preamble, ...extras, message ?? ''].filter(Boolean);

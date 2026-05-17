@@ -11,13 +11,15 @@ import VisualModal from '@/components/VisualModal';
 import CartDrawer from '@/components/CartDrawer';
 import GenderModal from '@/components/GenderModal';
 import ComparisonCard from '@/components/ComparisonCard';
+import { useUser } from '@clerk/nextjs';
 import { getInitialLang, t } from '@/lib/i18n';
-import { loadCart, saveCart, addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
-import { loadChats, saveChats, makeChat, upsertChat, deleteChat } from '@/lib/chats';
+import { addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
+import { makeChat, upsertChat, deleteChat } from '@/lib/chats';
 import { compressImage, extractUrls } from '@/lib/image';
 import { mockProducts, inferMode } from '@/lib/mocks';
 import { isTrusted } from '@/lib/retailers';
-import { defaultBudget, loadBudget, loadGender, loadPrefsSummary, saveBudget, saveGender, savePrefsSummary } from '@/lib/prefs';
+import { defaultBudget, parseBudgetFromMessage, mergeBudget } from '@/lib/prefs';
+import { loadUserState, saveUserState } from '@/lib/userState';
 import type {
   Attachment,
   Budget,
@@ -84,6 +86,7 @@ function EmptyState({
 }) {
   return (
     <div
+      className="oben-empty-state"
       style={{
         minHeight: '100%',
         display: 'flex',
@@ -144,6 +147,7 @@ function EmptyState({
       </p>
 
       <div
+        className="oben-empty-prompts"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(2, minmax(0, 280px))',
@@ -321,6 +325,8 @@ function TypingDots({ label }: { label: string }) {
 }
 
 export default function ChatPage() {
+  const { user, isLoaded: userLoaded } = useUser();
+  const uid = user?.id ?? null;
   const [lang, setLang] = useState<Lang>('en');
   const [mode, setMode] = useState<Mode>('auto');
   const [input, setInput] = useState('');
@@ -349,27 +355,55 @@ export default function ChatPage() {
   const [budget, setBudget] = useState<Budget>(defaultBudget('en'));
   const [genderModalOpen, setGenderModalOpen] = useState(false);
   const [prefsSummary, setPrefsSummary] = useState<string>('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const initialLang = getInitialLang();
-    setLang(initialLang);
-    setCart(loadCart());
-    setChats(loadChats());
-    setGender(loadGender());
-    setBudget(loadBudget(initialLang));
-    setPrefsSummary(loadPrefsSummary());
+    setLang(getInitialLang());
   }, []);
 
+  const prevUidRef = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!userLoaded) return;
+    const initialLang = getInitialLang();
+    const isAccountSwitch = prevUidRef.current !== undefined && prevUidRef.current !== uid;
+    prevUidRef.current = uid;
+
+    if (isAccountSwitch) {
+      setActiveId(null);
+      setMessages([]);
+    }
+    if (!uid) {
+      setCart([]);
+      setChats([]);
+      setGender(null);
+      setBudget(defaultBudget(initialLang));
+      setPrefsSummary('');
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const state = await loadUserState();
+      if (cancelled) return;
+      setCart(state.cart);
+      setChats(state.chats);
+      setGender(state.gender);
+      setBudget(state.budget ?? defaultBudget(initialLang));
+      setPrefsSummary(state.prefsSummary);
+    })();
+    return () => { cancelled = true; };
+  }, [userLoaded, uid]);
+
   const updateGender = (g: Gender) => {
-    saveGender(g);
     setGender(g);
     setGenderModalOpen(false);
+    void saveUserState({ gender: g });
   };
 
   const updateBudget = (b: Budget) => {
-    saveBudget(b);
     setBudget(b);
+    void saveUserState({ budget: b });
   };
 
   const compareProduct = async (p: Product, m: Mode) => {
@@ -400,9 +434,15 @@ export default function ChatPage() {
     });
   };
 
+  const cartHydrated = useRef(false);
   useEffect(() => {
-    saveCart(cart);
-  }, [cart]);
+    if (!userLoaded || !uid) return;
+    if (!cartHydrated.current) {
+      cartHydrated.current = true;
+      return;
+    }
+    void saveUserState({ cart });
+  }, [cart, uid, userLoaded]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -418,17 +458,18 @@ export default function ChatPage() {
     if (activeId) {
       const existing = chats.find((c) => c.id === activeId);
       chat = existing
-        ? { ...existing, messages: msgs }
+        ? { ...existing, messages: msgs, prefsSummary }
         : makeChat(firstUser, lang);
       if (!existing) setActiveId(chat.id);
     } else {
       chat = makeChat(firstUser, lang);
       chat.messages = msgs;
+      chat.prefsSummary = prefsSummary;
       setActiveId(chat.id);
     }
     const next = upsertChat(chats, chat);
     setChats(next);
-    saveChats(next);
+    void saveUserState({ chats: next });
   };
 
   const addProductToCart = (p: Product) => {
@@ -474,12 +515,12 @@ export default function ChatPage() {
     }
   };
 
-  const fetchProducts = async (query: string, m: Mode): Promise<Product[]> => {
+  const fetchProducts = async (query: string, m: Mode, budgetOverride?: Budget): Promise<Product[]> => {
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, mode: m, language: lang, gender, budget }),
+        body: JSON.stringify({ query, mode: m, language: lang, gender, budget: budgetOverride ?? budget }),
       });
       const data = (await res.json()) as { products: Product[] };
       return data.products ?? [];
@@ -492,8 +533,11 @@ export default function ChatPage() {
     if (response.prefsSummary && response.prefsSummary.trim()) {
       const trimmed = response.prefsSummary.trim().slice(0, 200);
       setPrefsSummary(trimmed);
-      savePrefsSummary(trimmed);
+      void saveUserState({ prefsSummary: trimmed });
     }
+    const lastUserMsg = [...baseMessages].reverse().find((m) => m.role === 'user')?.text ?? '';
+    const inMsgBudget = parseBudgetFromMessage(lastUserMsg, lang);
+    const effectiveBudget: Budget = inMsgBudget ? mergeBudget(budget, inMsgBudget) : budget;
     const VALID_MODES: Mode[] = ['price', 'fashion', 'home', 'electronics', 'beauty'];
     let resolvedMode: Mode = response.mode as Mode;
     if (!VALID_MODES.includes(resolvedMode)) {
@@ -523,7 +567,7 @@ export default function ChatPage() {
         ordered.map(async (idx) => {
           const s = suggestionsWithIdx.find((x) => x.sourceIndex === idx)!;
           const query = s.searchQuery || s.name;
-          const items = await fetchProducts(query, resolvedMode);
+          const items = await fetchProducts(query, resolvedMode, effectiveBudget);
           return { sourceIndex: idx, label: s.name || query, items };
         }),
       );
@@ -544,7 +588,7 @@ export default function ChatPage() {
             const q = s.color && !base.toLowerCase().includes(s.color.toLowerCase())
               ? `${s.color} ${base}`
               : base;
-            return fetchProducts(q, resolvedMode);
+            return fetchProducts(q, resolvedMode, effectiveBudget);
           }),
         );
         const usedRetailers = new Set<string>();
@@ -566,7 +610,7 @@ export default function ChatPage() {
           '';
         if (query) {
           setStatus(`${t('chat.status.searchingQuery', lang).replace('{q}', query.slice(0, 60))}`);
-          products = await fetchProducts(query, resolvedMode);
+          products = await fetchProducts(query, resolvedMode, effectiveBudget);
         }
       }
 
@@ -798,6 +842,7 @@ export default function ChatPage() {
     setActiveId(null);
     setMode('auto');
     setInput('');
+    setPrefsSummary('');
   };
 
   const selectChat = (id: string) => {
@@ -805,15 +850,17 @@ export default function ChatPage() {
     if (!chat) return;
     setActiveId(id);
     setMessages(chat.messages);
+    setPrefsSummary(chat.prefsSummary ?? '');
   };
 
   const removeChat = (id: string) => {
     const next = deleteChat(chats, id);
     setChats(next);
-    saveChats(next);
+    void saveUserState({ chats: next });
     if (activeId === id) {
       setActiveId(null);
       setMessages([]);
+      setPrefsSummary('');
     }
   };
 
@@ -824,19 +871,25 @@ export default function ChatPage() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+      <div
+        className={`oben-sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
+        onClick={() => setSidebarOpen(false)}
+      />
       <Sidebar
         chats={chats}
         activeId={activeId}
-        onSelect={selectChat}
-        onNew={newChat}
+        onSelect={(id) => { selectChat(id); setSidebarOpen(false); }}
+        onNew={() => { newChat(); setSidebarOpen(false); }}
         onDelete={removeChat}
         cartCount={cart.length}
-        onOpenCart={() => setCartOpen(true)}
+        onOpenCart={() => { setCartOpen(true); setSidebarOpen(false); }}
         lang={lang}
+        className={`oben-sidebar${sidebarOpen ? ' open' : ''}`}
       />
 
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%' }}>
         <header
+          className="oben-chat-header"
           style={{
             height: 54,
             flex: '0 0 54px',
@@ -848,10 +901,42 @@ export default function ChatPage() {
             padding: '0 28px',
           }}
         >
-          <div style={{ fontSize: 13.5, color: 'var(--ink)', fontWeight: 500, letterSpacing: '-.005em' }}>
-            {messages.length ? activeTitle : t('chat.title.new', lang)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              className="oben-mobile-only"
+              style={{
+                width: 32,
+                height: 32,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                color: 'var(--ink)',
+                flex: '0 0 32px',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+              </svg>
+            </button>
+            <div
+              className="oben-chat-header-title"
+              style={{
+                fontSize: 13.5,
+                color: 'var(--ink)',
+                fontWeight: 500,
+                letterSpacing: '-.005em',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {messages.length ? activeTitle : t('chat.title.new', lang)}
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="oben-chat-header-actions" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <button
               type="button"
               onClick={() => setGenderModalOpen(true)}
@@ -889,6 +974,7 @@ export default function ChatPage() {
             <EmptyState lang={lang} onPromptClick={onPromptClick} />
           ) : (
             <div
+              className="oben-chat-messages"
               style={{
                 maxWidth: 780,
                 margin: '8px auto 24px',

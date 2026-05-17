@@ -6,26 +6,56 @@ import Vitrine from '@/components/Vitrine';
 import Logo from '@/components/Logo';
 import LanguageToggle from '@/components/LanguageToggle';
 import GenderModal from '@/components/GenderModal';
+import PrefsModal from '@/components/PrefsModal';
 import { getInitialLang, t } from '@/lib/i18n';
-import { loadGender, saveGender } from '@/lib/prefs';
+import { loadUserState, saveUserState } from '@/lib/userState';
 import type { Gender, Lang } from '@/lib/types';
+import { SignedIn, SignedOut, SignUpButton, UserButton, useUser } from '@clerk/nextjs';
 
 export default function LandingPage() {
   const [lang, setLang] = useState<Lang>('en');
   const [showGender, setShowGender] = useState(false);
+  const [showPrefs, setShowPrefs] = useState(false);
+  const { isSignedIn, isLoaded, user } = useUser();
+  const uid = user?.id ?? null;
+  const [hasPrefs, setHasPrefs] = useState(false);
+
   useEffect(() => {
     setLang(getInitialLang());
-    if (loadGender() === null) setShowGender(true);
   }, []);
 
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !uid) return;
+    let cancelled = false;
+    (async () => {
+      const state = await loadUserState();
+      if (cancelled) return;
+      const prefsSet = Boolean(state.prefsSummary);
+      setHasPrefs(prefsSet);
+      if (state.gender === null) setShowGender(true);
+      else if (!prefsSet) setShowPrefs(true);
+    })();
+    return () => { cancelled = true; };
+  }, [isLoaded, isSignedIn, uid]);
+
   const handleGenderPick = (g: Gender) => {
-    saveGender(g);
     setShowGender(false);
+    void saveUserState({ gender: g });
+    if (!hasPrefs) setShowPrefs(true);
+  };
+
+  const handlePrefsSave = (p: string) => {
+    setShowPrefs(false);
+    if (p) {
+      setHasPrefs(true);
+      void saveUserState({ prefsSummary: p });
+    }
   };
 
   return (
     <div style={{ minHeight: '100vh', overflowX: 'hidden', position: 'relative' }}>
       <header
+        className="oben-landing-header"
         style={{
           position: 'fixed',
           top: 0,
@@ -43,6 +73,7 @@ export default function LandingPage() {
           <Logo />
         </Link>
         <div
+          className="oben-landing-nav"
           style={{
             pointerEvents: 'auto',
             fontSize: 13,
@@ -53,9 +84,10 @@ export default function LandingPage() {
           }}
         >
           <LanguageToggle lang={lang} onChange={setLang} />
-          <a href="#" style={{ color: 'var(--muted)' }}>{t('nav.journal', lang)}</a>
-          <a href="#" style={{ color: 'var(--muted)' }}>{t('nav.about', lang)}</a>
-          <Link href="/chat" style={{ color: 'var(--muted)' }}>{t('nav.openApp', lang)}</Link>
+          <Link href="/about" className="oben-landing-nav-secondary" style={{ color: 'var(--muted)' }}>{t('nav.about', lang)}</Link>
+          <SignedIn>
+            <UserButton afterSignOutUrl="/" />
+          </SignedIn>
         </div>
       </header>
 
@@ -75,6 +107,7 @@ export default function LandingPage() {
         }}
       >
         <section
+          className="oben-landing-hero"
           style={{
             pointerEvents: 'auto',
             textAlign: 'center',
@@ -135,30 +168,58 @@ export default function LandingPage() {
               {t('landing.tagline.rest', lang)}
             </em>
           </p>
-          <Link
-            href="/chat"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 10,
-              background: 'var(--accent)',
-              color: '#FAFAF8',
-              padding: '14px 26px',
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 500,
-              border: '1px solid var(--accent)',
-            }}
-          >
-            {t('landing.cta', lang)}
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M13 5l7 7-7 7" />
-            </svg>
-          </Link>
+          <SignedIn>
+            <Link
+              href="/chat"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                background: 'var(--accent)',
+                color: '#FAFAF8',
+                padding: '14px 26px',
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 500,
+                border: '1px solid var(--accent)',
+              }}
+            >
+              {t('landing.cta', lang)}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </SignedIn>
+          <SignedOut>
+            <SignUpButton mode="modal">
+              <button
+                type="button"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  background: 'var(--accent)',
+                  color: '#FAFAF8',
+                  padding: '14px 26px',
+                  borderRadius: 6,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  border: '1px solid var(--accent)',
+                  cursor: 'pointer',
+                }}
+              >
+                {t('landing.cta', lang)}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 5l7 7-7 7" />
+                </svg>
+              </button>
+            </SignUpButton>
+          </SignedOut>
         </section>
       </main>
 
       <div
+        className="oben-landing-meta-left"
         style={{
           position: 'fixed',
           left: 36,
@@ -179,6 +240,7 @@ export default function LandingPage() {
         <span>{t('landing.meta.center', lang)}</span>
       </div>
       <div
+        className="oben-landing-meta-right"
         style={{
           position: 'fixed',
           right: 36,
@@ -200,6 +262,14 @@ export default function LandingPage() {
           onSelect={handleGenderPick}
           onSkip={() => setShowGender(false)}
           onClose={() => setShowGender(false)}
+        />
+      )}
+      {showPrefs && !showGender && (
+        <PrefsModal
+          lang={lang}
+          onSave={handlePrefsSave}
+          onSkip={() => setShowPrefs(false)}
+          onClose={() => setShowPrefs(false)}
         />
       )}
     </div>

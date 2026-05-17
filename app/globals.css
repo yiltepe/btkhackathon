@@ -71,3 +71,61 @@ a { color: inherit; text-decoration: none; }
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
   mask-image: linear-gradient(180deg, transparent 0, #000 12%, #000 88%, transparent 100%);
 }
+
+.oben-mobile-only { display: none; }
+
+@media (max-width: 768px) {
+  .oben-landing-header { padding: 16px 18px !important; }
+  .oben-landing-nav { gap: 14px !important; font-size: 12px !important; }
+  .oben-landing-nav-secondary { display: none !important; }
+  .oben-landing-hero {
+    padding: 36px 22px 32px !important;
+    max-width: calc(100vw - 28px) !important;
+  }
+  .oben-landing-hero h1 { font-size: clamp(64px, 22vw, 110px) !important; margin-bottom: 18px !important; }
+  .oben-landing-hero p { font-size: 15px !important; margin-bottom: 28px !important; }
+  .oben-landing-meta-left,
+  .oben-landing-meta-right { display: none !important; }
+
+  .oben-sidebar {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 60;
+    width: 260px !important;
+    flex: 0 0 260px !important;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .oben-sidebar.open { transform: translateX(0); }
+  .oben-sidebar-backdrop {
+    position: fixed; inset: 0; z-index: 55;
+    background: rgba(20, 16, 12, .35);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease;
+  }
+  .oben-sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+  .oben-mobile-only { display: inline-flex !important; }
+
+  .oben-chat-header { padding: 0 14px !important; }
+  .oben-chat-header-title { font-size: 13px !important; }
+  .oben-chat-header-actions { gap: 8px !important; }
+
+  .oben-chat-messages { padding: 0 16px !important; }
+  .oben-input-bar { padding: 8px 14px 12px !important; }
+  .oben-input-disclaimer { display: none !important; }
+
+  .oben-empty-prompts {
+    grid-template-columns: 1fr !important;
+    max-width: 100% !important;
+  }
+  .oben-empty-state { padding: 36px 18px 28px !important; }
+
+  .oben-modal-card { width: calc(100vw - 24px) !important; max-width: 100% !important; }
+}
+
+@media (max-width: 480px) {
+  .oben-landing-nav-extra { display: none !important; }
+}

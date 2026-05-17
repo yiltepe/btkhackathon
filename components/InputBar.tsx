@@ -43,7 +43,7 @@ export default function InputBar({
   }, [value]);
 
   return (
-    <div style={{ padding: '12px 28px 18px', background: 'var(--bg)' }}>
+    <div className="oben-input-bar" style={{ padding: '12px 28px 18px', background: 'var(--bg)' }}>
       <div
         style={{
           maxWidth: 780,
@@ -190,6 +190,7 @@ export default function InputBar({
         </div>
       </div>
       <div
+        className="oben-input-disclaimer"
         style={{
           maxWidth: 780,
           margin: '8px auto 0',

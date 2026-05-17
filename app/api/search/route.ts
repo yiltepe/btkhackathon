@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serperSearch, hasSearch } from '@/lib/search';
 import { mockProducts } from '@/lib/mocks';
+import { isTrusted } from '@/lib/retailers';
 import type { Budget, Gender, Lang, Mode, Product } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
 type Body = { query: string; mode: Mode; language: Lang; gender?: Gender | null; budget?: Budget | null };
 
-function genderQualifier(gender: Gender | null | undefined, mode: Mode, lang: Lang): string {
+function genderQualifier(gender: Gender | null | undefined, _mode: Mode, lang: Lang, existingQuery: string): string {
   if (!gender || gender === 'unisex') return '';
-  if (mode !== 'fashion' && mode !== 'auto' && mode !== 'beauty') return '';
+  const q = existingQuery.toLowerCase();
+  const alreadyHas = lang === 'tr'
+    ? /(erkek|kadın|kadin|çocuk|cocuk|bebek|unisex)/.test(q)
+    : /(\bmen'?s?\b|\bwomen'?s?\b|\bkid'?s?\b|\bchildren'?s?\b|\bunisex\b)/i.test(q);
+  if (alreadyHas) return '';
   if (lang === 'tr') return gender === 'men' ? ' erkek' : ' kadın';
   return gender === 'men' ? ' men' : ' women';
 }
@@ -24,11 +29,18 @@ function localeBoost(p: Product, lang: Lang): number {
   return LOCALE_RETAILERS[lang].some((d) => hay.includes(d)) ? 1 : 0;
 }
 
+function tierOf(p: Product, lang: Lang): number {
+  // Higher tier = ranked higher. 2 = trusted brand, 1 = locale match, 0 = unknown.
+  if (isTrusted(p.retailer, p.link)) return 2;
+  if (localeBoost(p, lang)) return 1;
+  return 0;
+}
+
 function applyLocaleSort(products: Product[], lang: Lang): Product[] {
   return [...products].sort((a, b) => {
-    const ba = localeBoost(a, lang);
-    const bb = localeBoost(b, lang);
-    if (ba !== bb) return bb - ba;
+    const ta = tierOf(a, lang);
+    const tb = tierOf(b, lang);
+    if (ta !== tb) return tb - ta;
     if (a.price === null && b.price === null) return 0;
     if (a.price === null) return 1;
     if (b.price === null) return -1;
@@ -46,7 +58,13 @@ function applyBudgetFilter(products: Product[], budget: Budget | null | undefine
     if (budget.max !== null && v > budget.max) return false;
     return true;
   });
-  if (filtered.length === 0) return products;
+  // When the user set a HARD MIN ("5000 ve üzeri"), never silently fall back to cheaper items —
+  // it's better to return empty than to violate the constraint. Soft-fallback applies only when
+  // the constraint is just a max (so we still show *something* even if it's slightly over).
+  if (filtered.length === 0) {
+    if (budget.min !== null) return [];
+    return products;
+  }
   const unpriced = products.filter((p) => p.price === null);
   return [...filtered, ...unpriced];
 }
@@ -59,7 +77,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
   const { query, mode = 'price', language = 'en', gender = null, budget = null } = body;
-  const finalQuery = `${query}${genderQualifier(gender, mode, language)}`.trim();
+  const finalQuery = `${query}${genderQualifier(gender, mode, language, query)}`.trim();
 
   if (!hasSearch()) {
     console.warn('[api/search] SERPER_API_KEY not set → mock products');
@@ -70,7 +88,8 @@ export async function POST(req: NextRequest) {
     let products = await serperSearch(finalQuery, language);
     products = applyBudgetFilter(products, budget);
     const priced = products.filter((p) => p.price !== null);
-    if (priced.length < 3) {
+    const hasHardMin = budget !== null && budget?.min !== null;
+    if (priced.length < 3 && !hasHardMin) {
       console.warn(`[api/search] only ${priced.length} priced results for "${finalQuery}" → padding with mocks`);
       const padding = mockProducts(mode, language).filter(
         (m) => !products.some((p) => p.retailer === m.retailer),

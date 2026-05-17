@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Logo from './Logo';
 import { Glyph } from './Icons';
 import { t } from '@/lib/i18n';
 import type { Chat, Lang } from '@/lib/types';
+import { useClerk, useUser } from '@clerk/nextjs';
 
 export default function Sidebar({
   chats,
@@ -16,6 +17,7 @@ export default function Sidebar({
   cartCount,
   onOpenCart,
   lang,
+  className,
 }: {
   chats: Chat[];
   activeId: string | null;
@@ -25,10 +27,34 @@ export default function Sidebar({
   cartCount: number;
   onOpenCart: () => void;
   lang: Lang;
+  className?: string;
 }) {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const { user } = useUser();
+  const { signOut } = useClerk();
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [menuOpen]);
+
+  const displayName =
+    user?.username ||
+    user?.firstName ||
+    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ||
+    t('account.guest', lang);
+
+  const initial = (displayName[0] || '?').toUpperCase();
+
   return (
     <aside
+      className={className}
       style={{
         width: 240,
         flex: '0 0 240px',
@@ -146,7 +172,7 @@ export default function Sidebar({
         ))}
       </div>
 
-      <div style={{ borderTop: '1px solid var(--line-soft)', padding: '10px 12px 14px' }}>
+      <div style={{ borderTop: '1px solid var(--line-soft)', padding: '10px 12px 6px' }}>
         <button
           onClick={onOpenCart}
           className="oben-history-item"
@@ -186,6 +212,114 @@ export default function Sidebar({
             </span>
           )}
         </button>
+      </div>
+
+      <div ref={menuRef} style={{ position: 'relative', borderTop: '1px solid var(--line-soft)', padding: '8px 12px 14px' }}>
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          className="oben-history-item"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 10px',
+            fontSize: 13,
+            fontWeight: 500,
+            borderRadius: 5,
+            color: 'var(--ink)',
+            background: menuOpen ? '#F4F1EA' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+        >
+          <span
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: 'var(--accent)',
+              color: '#FAFAF8',
+              fontSize: 11,
+              fontWeight: 500,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            {initial}
+          </span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            {displayName}
+          </span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--muted)', transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .14s' }}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 'calc(100% - 2px)',
+              left: 12,
+              right: 12,
+              background: 'var(--bg-soft)',
+              border: '1px solid var(--line)',
+              borderRadius: 6,
+              boxShadow: '0 1px 4px rgba(0,0,0,.06), 0 20px 60px -30px rgba(0,0,0,.18)',
+              padding: 6,
+              zIndex: 50,
+            }}
+          >
+            <button
+              onClick={() => { setMenuOpen(false); }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '9px 10px',
+                fontSize: 13,
+                fontWeight: 500,
+                borderRadius: 4,
+                color: 'var(--accent)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(124,45,18,0.06)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Glyph icon="star" size={13} />
+              {t('account.upgrade', lang)}
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); signOut({ redirectUrl: '/' }); }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '9px 10px',
+                fontSize: 13,
+                fontWeight: 400,
+                borderRadius: 4,
+                color: 'var(--ink)',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#F4F1EA'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              {t('account.signOut', lang)}
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );

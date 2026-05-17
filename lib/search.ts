@@ -149,6 +149,45 @@ async function serperPost<T>(path: string, body: Record<string, unknown>): Promi
   return (await res.json()) as T;
 }
 
+export type WebSnippet = { title: string; link: string; snippet: string; source?: string };
+
+export async function serperWebSnippets(query: string, lang: 'en' | 'tr', num = 6): Promise<WebSnippet[]> {
+  const locale = lang === 'tr' ? { gl: 'tr', hl: 'tr' } : { gl: 'us', hl: 'en' };
+  const res = await serperPost<{ organic?: SerperOrganicItem[]; answerBox?: { snippet?: string; title?: string; link?: string }; knowledgeGraph?: { description?: string; title?: string; website?: string } }>('/search', {
+    q: query,
+    num,
+    ...locale,
+  });
+  if (!res) return [];
+  const out: WebSnippet[] = [];
+  if (res.answerBox?.snippet) {
+    out.push({
+      title: res.answerBox.title ?? 'Answer',
+      link: res.answerBox.link ?? '',
+      snippet: res.answerBox.snippet,
+      source: 'answerBox',
+    });
+  }
+  if (res.knowledgeGraph?.description) {
+    out.push({
+      title: res.knowledgeGraph.title ?? 'Overview',
+      link: res.knowledgeGraph.website ?? '',
+      snippet: res.knowledgeGraph.description,
+      source: 'knowledgeGraph',
+    });
+  }
+  for (const o of res.organic ?? []) {
+    if (!o.snippet || !o.link) continue;
+    out.push({
+      title: o.title ?? '',
+      link: o.link,
+      snippet: o.snippet,
+      source: retailerFromSource(o.source, o.link),
+    });
+  }
+  return out.slice(0, num);
+}
+
 export async function serperSearch(query: string, lang: 'en' | 'tr'): Promise<Product[]> {
   const locale = lang === 'tr' ? { gl: 'tr', hl: 'tr' } : { gl: 'us', hl: 'en' };
 

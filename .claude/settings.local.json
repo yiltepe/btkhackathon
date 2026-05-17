@@ -6,7 +6,9 @@
       "Bash(npm install *)",
       "Bash(dir /b \"C:\\\\Users\\\\dince\\\\Desktop\\\\btkhackathon\\\\components\")",
       "Bash(npx next *)",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(dir C:UsersdinceDesktopbtkhackathon *)",
+      "Bash(npm run *)"
     ]
   }
 }

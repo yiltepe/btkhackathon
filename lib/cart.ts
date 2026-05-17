@@ -1,20 +1,24 @@
 import type { CartItem } from './types';
 
-const KEY = 'oben:cart';
+const BASE = 'oben:cart';
 
-export function loadCart(): CartItem[] {
+function key(uid?: string | null): string {
+  return uid ? `${BASE}:${uid}` : BASE;
+}
+
+export function loadCart(uid?: string | null): CartItem[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = window.localStorage.getItem(key(uid));
     return raw ? (JSON.parse(raw) as CartItem[]) : [];
   } catch {
     return [];
   }
 }
 
-export function saveCart(items: CartItem[]): void {
+export function saveCart(items: CartItem[], uid?: string | null): void {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(KEY, JSON.stringify(items));
+  window.localStorage.setItem(key(uid), JSON.stringify(items));
 }
 
 export function addToCart(items: CartItem[], item: CartItem): CartItem[] {
