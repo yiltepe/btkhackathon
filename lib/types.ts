@@ -80,6 +80,7 @@ export type ResolvedProduct = {
   image?: string;
   jsonLd?: Record<string, unknown>;
   sourceUrl?: string;
+  lensProducts?: Product[];
 };
 
 export type Attachment = { kind: 'image' | 'link'; preview?: string; label?: string };

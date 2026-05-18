@@ -188,6 +188,46 @@ export async function serperWebSnippets(query: string, lang: 'en' | 'tr', num = 
   return out.slice(0, num);
 }
 
+type SerperLensItem = {
+  title?: string;
+  link?: string;
+  source?: string;
+  thumbnailUrl?: string;
+  imageUrl?: string;
+  price?: string;
+  currency?: string;
+  priceValue?: number;
+};
+
+function lensToProduct(item: SerperLensItem): Product | null {
+  if (!item.link) return null;
+  const priceRaw = item.price ?? (typeof item.priceValue === 'number' ? String(item.priceValue) : undefined);
+  const currency = item.currency ?? (priceRaw ? detectCurrency(priceRaw) : null);
+  const price = typeof item.priceValue === 'number'
+    ? item.priceValue
+    : parsePrice(priceRaw, currency);
+  return {
+    name: item.title ?? 'Product',
+    price,
+    currency: currency ?? 'USD',
+    thumbnail: item.thumbnailUrl ?? item.imageUrl ?? '',
+    link: item.link,
+    retailer: retailerFromSource(item.source, item.link),
+  };
+}
+
+export async function serperLens(imageUrl: string, lang: 'en' | 'tr'): Promise<Product[]> {
+  const locale = lang === 'tr' ? { gl: 'tr', hl: 'tr' } : { gl: 'us', hl: 'en' };
+  const res = await serperPost<{ organic?: SerperLensItem[]; lens?: SerperLensItem[]; shopping?: SerperLensItem[] }>(
+    '/lens',
+    { url: imageUrl, ...locale },
+  );
+  if (!res) return [];
+  const items = [...(res.shopping ?? []), ...(res.lens ?? []), ...(res.organic ?? [])];
+  const products = items.map(lensToProduct).filter((p): p is Product => p !== null);
+  return dedupeAndSort(products);
+}
+
 export async function serperSearch(query: string, lang: 'en' | 'tr'): Promise<Product[]> {
   const locale = lang === 'tr' ? { gl: 'tr', hl: 'tr' } : { gl: 'us', hl: 'en' };
 

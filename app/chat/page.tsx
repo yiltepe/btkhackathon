@@ -11,7 +11,7 @@ import VisualModal from '@/components/VisualModal';
 import CartDrawer from '@/components/CartDrawer';
 import GenderModal from '@/components/GenderModal';
 import ComparisonCard from '@/components/ComparisonCard';
-import { useUser } from '@clerk/nextjs';
+import { useUser, UserButton, SignedIn } from '@clerk/nextjs';
 import { getInitialLang, t } from '@/lib/i18n';
 import { addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
 import { makeChat, upsertChat, deleteChat } from '@/lib/chats';
@@ -215,6 +215,8 @@ function UserMsg({ msg }: { msg: Message }) {
           lineHeight: 1.45,
           letterSpacing: '-.005em',
           whiteSpace: 'pre-wrap',
+          overflowWrap: 'break-word',
+          wordBreak: 'break-word',
         }}
       >
         {images.length > 0 && (
@@ -539,12 +541,14 @@ export default function ChatPage() {
     const inMsgBudget = parseBudgetFromMessage(lastUserMsg, lang);
     const effectiveBudget: Budget = inMsgBudget ? mergeBudget(budget, inMsgBudget) : budget;
     const VALID_MODES: Mode[] = ['price', 'fashion', 'home', 'electronics', 'beauty'];
+    const isChitchat = response.mode === 'chitchat';
     let resolvedMode: Mode = response.mode as Mode;
     if (!VALID_MODES.includes(resolvedMode)) {
-      resolvedMode = inferMode(response.text);
+      resolvedMode = isChitchat ? 'price' : inferMode(response.text);
     }
     const needsClarification = !!(response.clarify?.groups?.length);
     const hasShoppingIntent =
+      !isChitchat &&
       !needsClarification && (
         forceShoppingIntent ||
         !!response.identifiedItem ||
@@ -556,6 +560,25 @@ export default function ChatPage() {
 
     let products: Product[] = response.retailers ?? [];
     let productsByIndex: Message['productsByIndex'] | undefined;
+
+    const lastUser = [...baseMessages].reverse().find((m) => m.role === 'user');
+    const lensFromResolve = lastUser?.resolvedProducts?.flatMap((rp) => rp.lensProducts ?? []) ?? [];
+
+    if (hasShoppingIntent && products.length === 0 && resolvedMode === 'price' && lensFromResolve.length > 0) {
+      const { min, max } = effectiveBudget;
+      const filtered = (min === null && max === null)
+        ? lensFromResolve
+        : lensFromResolve.filter((p) => {
+            if (p.price === null) return true;
+            if (min !== null && p.price < min) return false;
+            if (max !== null && p.price > max) return false;
+            return true;
+          });
+      if (filtered.length >= 3) {
+        products = filtered.slice(0, 12);
+        console.log(`[chat] using ${products.length} Google Lens matches, skipping /api/search`);
+      }
+    }
 
     // Multi-source FIND_CHEAPER: each suggestion has a distinct sourceIndex → one search per item.
     const suggestionsWithIdx = (response.suggestions ?? []).filter((s) => typeof s.sourceIndex === 'number');
@@ -573,9 +596,6 @@ export default function ChatPage() {
       );
       productsByIndex = groups;
       products = groups.flatMap((g) => g.items.slice(0, 3));
-      if (products.length === 0) {
-        products = mockProducts(resolvedMode, lang);
-      }
     } else if (hasShoppingIntent && products.length === 0) {
       if ((resolvedMode === 'fashion' || resolvedMode === 'home') && response.suggestions?.length) {
         // One search per suggested piece; pick the cheapest match per query.
@@ -614,9 +634,6 @@ export default function ChatPage() {
         }
       }
 
-      if (products.length === 0) {
-        products = mockProducts(resolvedMode, lang);
-      }
     }
 
     const kind: Message['kind'] | undefined = hasShoppingIntent
@@ -716,8 +733,42 @@ export default function ChatPage() {
           ? t('chat.resolvingMulti', lang).replace('{n}', String(detectedUrls.length))
           : t('chat.status.resolving', lang),
       );
+      const isDirectImageUrl = (u: string): boolean => {
+        if (/\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i.test(u)) return true;
+        try {
+          const host = new URL(u).hostname.toLowerCase();
+          if (host.includes('gstatic.com')) return true;
+          if (host.startsWith('encrypted-tbn')) return true;
+          if (host.endsWith('.googleusercontent.com')) return true;
+        } catch {
+          /* ignore */
+        }
+        return false;
+      };
+
+      const callLens = async (imageUrl: string): Promise<Product[] | undefined> => {
+        try {
+          const lensRes = await fetch('/api/lens', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageUrl, language: lang }),
+          });
+          if (!lensRes.ok) return undefined;
+          const lensData = (await lensRes.json()) as { products?: Product[] };
+          return lensData.products && lensData.products.length > 0 ? lensData.products : undefined;
+        } catch {
+          return undefined;
+        }
+      };
+
       const results = await Promise.all(
         detectedUrls.map(async (u) => {
+          if (isDirectImageUrl(u)) {
+            const lensProducts = await callLens(u);
+            if (!lensProducts || lensProducts.length === 0) return null;
+            const title = lensProducts[0]?.name || 'Image';
+            return { title, image: u, sourceUrl: u, lensProducts } as ResolvedProduct;
+          }
           try {
             const res = await fetch('/api/resolve', {
               method: 'POST',
@@ -733,7 +784,8 @@ export default function ChatPage() {
               error?: string;
             };
             if (data.error || !data.title) return null;
-            return { title: data.title, image: data.image, jsonLd: data.jsonLd, sourceUrl: u } as ResolvedProduct;
+            const lensProducts = data.image ? await callLens(data.image) : undefined;
+            return { title: data.title, image: data.image, jsonLd: data.jsonLd, sourceUrl: u, lensProducts } as ResolvedProduct;
           } catch {
             return null;
           }
@@ -963,6 +1015,17 @@ export default function ChatPage() {
               {gender ? GENDER_LABELS[gender][lang] : t('gender.chip', lang)}
             </button>
             <LanguageToggle lang={lang} onChange={setLang} />
+            <SignedIn>
+              <UserButton afterSignOutUrl="/">
+                <UserButton.MenuItems>
+                  <UserButton.Action
+                    label={t('account.upgrade', lang)}
+                    labelIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>}
+                    onClick={() => {}}
+                  />
+                </UserButton.MenuItems>
+              </UserButton>
+            </SignedIn>
           </div>
         </header>
 
@@ -1016,7 +1079,7 @@ export default function ChatPage() {
                           </div>
                         ))}
                       </div>
-                    ) : msg.kind === 'price' || msg.kind === 'electronics' || msg.kind === 'beauty' ? (
+                    ) : (msg.kind === 'price' || msg.kind === 'electronics' || msg.kind === 'beauty') && (msg.products?.length ?? 0) > 0 ? (
                       <PriceCard
                         productName={msg.response?.identifiedItem?.name}
                         retailers={msg.products ?? []}
@@ -1029,7 +1092,7 @@ export default function ChatPage() {
                         }
                         lang={lang}
                       />
-                    ) : msg.kind === 'fashion' || msg.kind === 'home' ? (
+                    ) : (msg.kind === 'fashion' || msg.kind === 'home') && (msg.products?.length ?? 0) > 0 ? (
                       <LookCard
                         variant={msg.kind}
                         items={msg.products ?? []}

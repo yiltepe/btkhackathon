@@ -87,15 +87,6 @@ export async function POST(req: NextRequest) {
   try {
     let products = await serperSearch(finalQuery, language);
     products = applyBudgetFilter(products, budget);
-    const priced = products.filter((p) => p.price !== null);
-    const hasHardMin = budget !== null && budget?.min !== null;
-    if (priced.length < 3 && !hasHardMin) {
-      console.warn(`[api/search] only ${priced.length} priced results for "${finalQuery}" → padding with mocks`);
-      const padding = mockProducts(mode, language).filter(
-        (m) => !products.some((p) => p.retailer === m.retailer),
-      );
-      products = [...products, ...padding].slice(0, 8);
-    }
     products = applyLocaleSort(products, language);
     return NextResponse.json({ products });
   } catch (err) {

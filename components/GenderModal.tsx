@@ -3,6 +3,7 @@
 import React from 'react';
 import { t } from '@/lib/i18n';
 import type { Gender, Lang } from '@/lib/types';
+import LanguageToggle from './LanguageToggle';
 
 type Props = {
   lang: Lang;
@@ -11,6 +12,7 @@ type Props = {
   onSkip?: () => void;
   onClose?: () => void;
   showSkip?: boolean;
+  onLangChange?: (l: Lang) => void;
 };
 
 const OPTIONS: { value: Gender; labelKey: 'gender.men' | 'gender.women' | 'gender.unisex' }[] = [
@@ -19,7 +21,7 @@ const OPTIONS: { value: Gender; labelKey: 'gender.men' | 'gender.women' | 'gende
   { value: 'unisex', labelKey: 'gender.unisex' },
 ];
 
-export default function GenderModal({ lang, current, onSelect, onSkip, onClose, showSkip = true }: Props) {
+export default function GenderModal({ lang, current, onSelect, onSkip, onClose, showSkip = true, onLangChange }: Props) {
   return (
     <div
       role="dialog"
@@ -49,29 +51,31 @@ export default function GenderModal({ lang, current, onSelect, onSkip, onClose, 
           border: '1px solid var(--line)',
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: '.18em',
-            textTransform: 'uppercase',
-            color: 'var(--muted)',
-            marginBottom: 14,
-            fontWeight: 500,
-          }}
-        >
-          <span
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div
             style={{
-              display: 'inline-block',
-              width: 5,
-              height: 5,
-              borderRadius: '50%',
-              background: 'var(--accent)',
-              marginRight: 8,
-              verticalAlign: 'middle',
-              transform: 'translateY(-1px)',
+              fontSize: 11,
+              letterSpacing: '.18em',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 500,
             }}
-          />
-          OBEN
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: 5,
+                height: 5,
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                marginRight: 8,
+                verticalAlign: 'middle',
+                transform: 'translateY(-1px)',
+              }}
+            />
+            OBEN
+          </div>
+          {onLangChange && <LanguageToggle lang={lang} onChange={onLangChange} />}
         </div>
         <h2
           style={{

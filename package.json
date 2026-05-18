@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clerk/localizations": "^3.37.5",
     "@clerk/nextjs": "^6.39.3",
     "@google/generative-ai": "^0.21.0",
     "@supabase/supabase-js": "^2.105.4",

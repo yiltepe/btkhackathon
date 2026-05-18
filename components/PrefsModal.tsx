@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { t } from '@/lib/i18n';
 import type { Lang } from '@/lib/types';
+import LanguageToggle from './LanguageToggle';
 
 type Props = {
   lang: Lang;
@@ -10,9 +11,10 @@ type Props = {
   onSave: (prefs: string) => void;
   onSkip?: () => void;
   onClose?: () => void;
+  onLangChange?: (l: Lang) => void;
 };
 
-export default function PrefsModal({ lang, initial = '', onSave, onSkip, onClose }: Props) {
+export default function PrefsModal({ lang, initial = '', onSave, onSkip, onClose, onLangChange }: Props) {
   const [value, setValue] = useState(initial);
 
   return (
@@ -44,29 +46,31 @@ export default function PrefsModal({ lang, initial = '', onSave, onSkip, onClose
           border: '1px solid var(--line)',
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: '.18em',
-            textTransform: 'uppercase',
-            color: 'var(--muted)',
-            marginBottom: 14,
-            fontWeight: 500,
-          }}
-        >
-          <span
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div
             style={{
-              display: 'inline-block',
-              width: 5,
-              height: 5,
-              borderRadius: '50%',
-              background: 'var(--accent)',
-              marginRight: 8,
-              verticalAlign: 'middle',
-              transform: 'translateY(-1px)',
+              fontSize: 11,
+              letterSpacing: '.18em',
+              textTransform: 'uppercase',
+              color: 'var(--muted)',
+              fontWeight: 500,
             }}
-          />
-          OBEN
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: 5,
+                height: 5,
+                borderRadius: '50%',
+                background: 'var(--accent)',
+                marginRight: 8,
+                verticalAlign: 'middle',
+                transform: 'translateY(-1px)',
+              }}
+            />
+            OBEN
+          </div>
+          {onLangChange && <LanguageToggle lang={lang} onChange={onLangChange} />}
         </div>
         <h2
           style={{

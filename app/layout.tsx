@@ -1,6 +1,6 @@
 import './globals.css';
 import type { Metadata } from 'next';
-import { ClerkProvider } from '@clerk/nextjs';
+import ClerkLocaleProvider from '@/components/ClerkLocaleProvider';
 
 export const metadata: Metadata = {
   title: 'OBEN — Your shopping concierge',
@@ -15,10 +15,10 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkLocaleProvider>
       <html lang="en">
         <body>{children}</body>
       </html>
-    </ClerkProvider>
+    </ClerkLocaleProvider>
   );
 }
