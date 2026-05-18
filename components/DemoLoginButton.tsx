@@ -5,8 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import type { Lang } from '@/lib/types';
 
-const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL ?? '';
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? '';
+const DEMO_ENABLED = process.env.NEXT_PUBLIC_DEMO_ENABLED === '1';
 
 export default function DemoLoginButton({ lang }: { lang: Lang }) {
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -14,25 +13,23 @@ export default function DemoLoginButton({ lang }: { lang: Lang }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (!DEMO_EMAIL || !DEMO_PASSWORD) return null;
+  if (!DEMO_ENABLED) return null;
 
   const handleDemo = async () => {
     if (!isLoaded || !signIn || loading) return;
     setLoading(true);
     setError('');
     try {
-      const result = await signIn.create({
-        strategy: 'password',
-        identifier: DEMO_EMAIL,
-        password: DEMO_PASSWORD,
-      });
+      const res = await fetch('/api/demo-login', { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      const { ticket } = await res.json();
+      const result = await signIn.create({ strategy: 'ticket', ticket });
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId });
         router.push('/chat');
-      } else if (result.status === 'needs_second_factor') {
-        setError(lang === 'tr'
-          ? 'Demo hesabında 2FA aktif. Clerk panelinden kapatın.'
-          : 'Demo account has 2FA enabled. Disable it in Clerk dashboard.');
       } else {
         setError(`Status: ${result.status}`);
       }
