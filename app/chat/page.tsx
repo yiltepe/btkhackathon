@@ -11,6 +11,7 @@ import VisualModal from '@/components/VisualModal';
 import CartDrawer from '@/components/CartDrawer';
 import GenderModal from '@/components/GenderModal';
 import ComparisonCard from '@/components/ComparisonCard';
+import UpgradeModal, { getStoredPlan, setPlanStorage, type Plan } from '@/components/UpgradeModal';
 import { useUser, UserButton, SignedIn } from '@clerk/nextjs';
 import { getInitialLang, t } from '@/lib/i18n';
 import { addToCart as cartAdd, removeFromCart as cartRemove } from '@/lib/cart';
@@ -356,12 +357,15 @@ export default function ChatPage() {
   const [gender, setGender] = useState<Gender | null>(null);
   const [budget, setBudget] = useState<Budget>(defaultBudget('en'));
   const [genderModalOpen, setGenderModalOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [plan, setPlan] = useState<Plan>('basic');
   const [prefsSummary, setPrefsSummary] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLang(getInitialLang());
+    setPlan(getStoredPlan());
   }, []);
 
   const prevUidRef = useRef<string | null | undefined>(undefined);
@@ -541,7 +545,7 @@ export default function ChatPage() {
     const inMsgBudget = parseBudgetFromMessage(lastUserMsg, lang);
     const effectiveBudget: Budget = inMsgBudget ? mergeBudget(budget, inMsgBudget) : budget;
     const VALID_MODES: Mode[] = ['price', 'fashion', 'home', 'electronics', 'beauty'];
-    const isChitchat = response.mode === 'chitchat';
+    const isChitchat = (response.mode as string) === 'chitchat';
     let resolvedMode: Mode = response.mode as Mode;
     if (!VALID_MODES.includes(resolvedMode)) {
       resolvedMode = isChitchat ? 'price' : inferMode(response.text);
@@ -1021,7 +1025,7 @@ export default function ChatPage() {
                   <UserButton.Action
                     label={t('account.upgrade', lang)}
                     labelIcon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>}
-                    onClick={() => {}}
+                    onClick={() => setUpgradeOpen(true)}
                   />
                 </UserButton.MenuItems>
               </UserButton>
@@ -1096,6 +1100,8 @@ export default function ChatPage() {
                       <LookCard
                         variant={msg.kind}
                         items={msg.products ?? []}
+                        hasVisual={msg.response?.hasVisual}
+                        suggestions={msg.response?.suggestions}
                         onAdd={addProductToCart}
                         onCompare={(p) => compareProduct(p, msg.kind as Mode)}
                         onOpenModal={() => {
@@ -1113,6 +1119,10 @@ export default function ChatPage() {
                               };
                             }
                             break;
+                          }
+                          if (plan !== 'pro') {
+                            setUpgradeOpen(true);
+                            return;
                           }
                           const pieces = msg.response?.suggestions
                             ?.map((s) => ({ description: s.visualDescription || s.name }))
@@ -1282,6 +1292,15 @@ export default function ChatPage() {
           onSelect={updateGender}
           onClose={() => setGenderModalOpen(false)}
           showSkip={false}
+        />
+      )}
+
+      {upgradeOpen && (
+        <UpgradeModal
+          lang={lang}
+          currentPlan={plan}
+          onClose={() => setUpgradeOpen(false)}
+          onUpgrade={(p) => { setPlan(p); setPlanStorage(p); }}
         />
       )}
     </div>

@@ -11,6 +11,7 @@ import { getInitialLang, t } from '@/lib/i18n';
 import { loadUserState, saveUserState } from '@/lib/userState';
 import type { Gender, Lang } from '@/lib/types';
 import { SignedIn, SignedOut, SignUpButton, UserButton, useUser } from '@clerk/nextjs';
+import DemoLoginButton from '@/components/DemoLoginButton';
 
 export default function LandingPage() {
   const [lang, setLang] = useState<Lang>('en');
@@ -214,6 +215,7 @@ export default function LandingPage() {
                 </svg>
               </button>
             </SignUpButton>
+            <DemoLoginButton lang={lang} />
           </SignedOut>
         </section>
       </main>

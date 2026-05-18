@@ -130,6 +130,7 @@ export default function VisualModal({
   const [elapsed, setElapsed] = useState(0);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const checkedCacheRef = useRef(false);
+  const [autoGenerate, setAutoGenerate] = useState(false);
 
   useEffect(() => {
     if (checkedCacheRef.current) return;
@@ -143,10 +144,17 @@ export default function VisualModal({
       if (cached) {
         setImage(cached);
         onGenerated?.(cached);
+      } else {
+        setAutoGenerate(true);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (autoGenerate) startGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoGenerate]);
 
   const startGenerate = async () => {
     if (loading || image) return;

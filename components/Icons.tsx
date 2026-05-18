@@ -22,6 +22,7 @@ export const Icon = {
   truck: <svg {...P}><rect x="1" y="6" width="14" height="11" rx="1" /><path d="M15 9h4l3 4v4h-7" /><circle cx="6" cy="18" r="1.5" /><circle cx="18" cy="18" r="1.5" /></svg>,
   star: <svg {...P}><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17.1l-5.4 2.8 1-6.1L3.2 9.5l6.1-.9z" /></svg>,
   external: <svg {...P}><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5" /></svg>,
+  image: <svg {...P}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="M21 15l-5-5L5 21" /></svg>,
 };
 
 export function Glyph({
