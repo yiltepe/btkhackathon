@@ -4,13 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import PriceCard from '@/components/PriceCard';
 import LookCard from '@/components/LookCard';
 import VisualModal from '@/components/VisualModal';
+import ComparisonCard from '@/components/ComparisonCard';
 import { compressImage } from '@/lib/image';
-import type { Lang, Product, StandardResponse } from '@/lib/types';
+import type { Clarify, Comparison, Lang, Product, StandardResponse } from '@/lib/types';
 
 type SceneKey =
   | 'uploadFashion'
   | 'uploadPrice'
   | 'price'
+  | 'compare'
+  | 'clarify'
   | 'fashion'
   | 'home'
   | 'priceTr';
@@ -20,7 +23,7 @@ type SceneSpec =
   | {
       kind: 'chat';
       lang: Lang;
-      mode: 'price' | 'fashion' | 'home';
+      mode: 'price' | 'fashion' | 'home' | 'electronics';
       prompt: string;
       status: string;
       aiText?: string;
@@ -41,6 +44,8 @@ type PreparedScene = {
   imagePrompt?: string;
   preview?: string;
   anchor?: AnchorImage;
+  comparison?: Comparison;
+  clarify?: Clarify;
 };
 
 type PreparedData = Record<SceneKey, PreparedScene>;
@@ -53,9 +58,9 @@ const SCENES: SceneSpec[] = [
   {
     kind: 'statement',
     lines: [
-      'The internet sells everything.',
-      'That has never been the problem.',
-      'The problem is choosing.',
+      'İnternet her şeyi satıyor.',
+      'Asıl mesele bu değil.',
+      'Asıl mesele, seçim yapmak.',
     ],
     hold: 1800,
   },
@@ -94,6 +99,27 @@ const SCENES: SceneSpec[] = [
   {
     kind: 'chat',
     lang: 'tr',
+    mode: 'electronics',
+    prompt: 'Samsung Galaxy S24 mü, iPhone 15 mi?',
+    status: 'Karşılaştırma hazırlanıyor...',
+    aiText:
+      'İkisini günlük kullanım, kamera ve fiyat açısından kıyasladım. Özet aşağıda.',
+    sceneKey: 'compare',
+    hold: 5200,
+  },
+  {
+    kind: 'chat',
+    lang: 'tr',
+    mode: 'fashion',
+    prompt: 'İş için bir ceket bul.',
+    status: 'Tarz seçenekleri hazırlanıyor...',
+    aiText: 'Daraltmak için iki şey sorayım:',
+    sceneKey: 'clarify',
+    hold: 4000,
+  },
+  {
+    kind: 'chat',
+    lang: 'tr',
     mode: 'fashion',
     prompt: 'Krem ipek elbise etrafında lacivert bir düğün daveti kombini kur. 400 EUR altı.',
     status: 'Kombin oluşturuluyor...',
@@ -118,9 +144,9 @@ const SCENES: SceneSpec[] = [
     kind: 'chat',
     lang: 'tr',
     mode: 'price',
-    prompt: 'Ayni boucle koltugu daha ucuza bul.',
-    status: 'Magazalar taraniyor...',
-    aiText: 'Ayni modeli uc magazada buldum. En ucuzu kargo dahil - fiyatlara gore siraladim.',
+    prompt: 'Aynı boucle koltuğu daha ucuza bul.',
+    status: 'Mağazalar taranıyor...',
+    aiText: 'Aynı modeli üç mağazada buldum. En ucuzu kargo dahil — fiyatlara göre sıraladım.',
     sceneKey: 'priceTr',
     hold: 4200,
   },
@@ -161,16 +187,20 @@ const VISUAL_OPEN_DELAY_MS = 1600;
 const VISUAL_AUTO_CLOSE_MS = 5500;
 const VISUAL_FAILSAFE_CLOSE_MS = 20000;
 
-const FASHION_SUGGESTIONS = PROMO_QUERIES.fashion.queries.map((q) => ({
-  name: q,
-  searchQuery: q,
-  visualDescription: q,
-}));
-const HOME_SUGGESTIONS = PROMO_QUERIES.home.queries.map((q) => ({
-  name: q,
-  searchQuery: q,
-  visualDescription: q,
-}));
+const FASHION_SUGGESTIONS = [
+  { name: 'Krem ipek askılı elbise', searchQuery: 'cream silk slip dress', visualDescription: 'cream silk slip dress' },
+  { name: 'Lacivert süet topuklu', searchQuery: 'navy suede heel', visualDescription: 'navy suede heel' },
+  { name: 'İnci sallantılı küpe', searchQuery: 'pearl drop earring', visualDescription: 'pearl drop earring' },
+  { name: 'Lacivert saten clutch', searchQuery: 'navy satin clutch', visualDescription: 'navy satin clutch' },
+  { name: 'Boynuz desen saç tokası', searchQuery: 'tortoise hair claw', visualDescription: 'tortoise hair claw' },
+  { name: 'Kaşmir şal', searchQuery: 'cashmere wrap shawl', visualDescription: 'cashmere wrap shawl' },
+];
+const HOME_SUGGESTIONS = [
+  { name: 'Fildişi boucle koltuk', searchQuery: 'boucle armchair ivory', visualDescription: 'boucle armchair ivory' },
+  { name: 'Alçak pirinç yer lambası', searchQuery: 'low brass floor lamp', visualDescription: 'low brass floor lamp' },
+  { name: 'Ceviz yan sehpa', searchQuery: 'walnut side table', visualDescription: 'walnut side table' },
+  { name: 'Doğal yün halı 120×170', searchQuery: 'wool rug 120x170 natural', visualDescription: 'wool rug 120x170 natural' },
+];
 
 const FASHION_IMAGE_PROMPT =
   'Editorial flat-lay fashion photo on a soft neutral off-white background. Outfit featuring: cream silk slip dress, navy suede heel, pearl drop earring, navy satin clutch, tortoise hair claw, cashmere wrap shawl. Clean editorial magazine styling, soft natural light, no people, no text, no watermarks.';
@@ -287,11 +317,12 @@ function StatementScene({
   );
 }
 
-function HeaderBar({ lang, mode }: { lang: Lang; mode: 'price' | 'fashion' | 'home' }) {
+function HeaderBar({ lang, mode }: { lang: Lang; mode: 'price' | 'fashion' | 'home' | 'electronics' }) {
   const modeLabel: Record<typeof mode, { en: string; tr: string }> = {
     price: { en: 'Price', tr: 'Fiyat' },
     fashion: { en: 'Fashion', tr: 'Moda' },
     home: { en: 'Home', tr: 'Ev' },
+    electronics: { en: 'Electronics', tr: 'Elektronik' },
   };
   return (
     <header
@@ -501,7 +532,7 @@ function ChatScene({
                   {phase === 'resolving'
                     ? scene.status
                     : scene.lang === 'tr'
-                    ? 'Dusunuyor...'
+                    ? 'Düşünüyor...'
                     : 'Thinking...'}
                 </span>
                 <span className="oben-typing">
@@ -572,6 +603,69 @@ function ChatScene({
                   />
                 </div>
               )}
+              {sceneData.comparison && (
+                <ComparisonCard comparison={sceneData.comparison} lang={scene.lang} />
+              )}
+              {sceneData.clarify?.groups?.length ? (
+                <div style={{ marginTop: 14 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '.12em',
+                      fontWeight: 500,
+                      marginBottom: 10,
+                    }}
+                  >
+                    {scene.lang === 'tr' ? 'Birkaç soru' : 'A few questions'}
+                  </div>
+                  {sceneData.clarify.groups.map((grp, gi) => (
+                    <div key={gi} style={{ marginBottom: 12 }}>
+                      <div
+                        style={{
+                          fontSize: 12.5,
+                          color: 'var(--ink)',
+                          marginBottom: 6,
+                          fontWeight: 500,
+                          letterSpacing: '-.005em',
+                        }}
+                      >
+                        {grp.question}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {grp.options.map((opt) => (
+                          <span
+                            key={opt}
+                            style={{
+                              padding: '5px 11px',
+                              borderRadius: 999,
+                              border: '1px solid var(--line)',
+                              background: 'var(--bg-soft)',
+                              fontSize: 12.5,
+                              color: 'var(--ink)',
+                            }}
+                          >
+                            {opt}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {sceneData.clarify.allowOther && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: 'var(--muted)',
+                        fontStyle: 'italic',
+                        marginTop: 2,
+                      }}
+                    >
+                      {scene.lang === 'tr' ? 'veya kendi cevabını yaz' : 'or type your own'}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -592,7 +686,7 @@ function ChatScene({
           }}
         >
           {scene.lang === 'tr'
-            ? 'Bir link yapistir veya tarif et...'
+            ? 'Bir link yapıştır veya tarif et...'
             : 'Paste a link or describe what you need...'}
         </div>
       </div>
@@ -967,7 +1061,7 @@ export default function PromoPage() {
         products: uploadFashionProducts,
         responseText:
           fashionAnalysis?.text ||
-          'Built around the uploaded piece: clean layers, softer contrast, and a tighter retailer mix to keep the look coherent.',
+          'Yüklediğin parça etrafında: temiz katmanlar, yumuşak kontrast ve uyumlu mağazalardan dengeli bir seçim.',
         productName: fashionAnalysis?.identifiedItem?.name,
         suggestions: uploadFashionSuggestions.map((suggestion) => ({
           name: suggestion.name,
@@ -986,7 +1080,7 @@ export default function PromoPage() {
         products: uploadPriceProducts,
         responseText:
           priceAnalysis?.text ||
-          'Matched the item and sorted the best near-identical listings cheapest first.',
+          'Ürünü eşleştirdim. Neredeyse aynı listeleri ucuzdan pahalıya sıraladım.',
         productName: priceAnalysis?.identifiedItem?.name || uploadPriceProducts[0]?.name,
         preview: uploadPrice.preview,
         anchor: {
@@ -999,6 +1093,48 @@ export default function PromoPage() {
         products: price,
         responseText: getSceneAiText('price'),
         productName: price[0]?.name,
+      },
+      compare: {
+        products: [],
+        responseText: getSceneAiText('compare'),
+        comparison: {
+          items: [
+            {
+              name: 'Samsung Galaxy S24',
+              summary: 'Daha esnek yapay zekâ paketi ve daha açık kamera kontrolü.',
+              pros: ['Galaxy AI çeviri ve özetleme', 'Daha geniş ekran modları', 'Daha hızlı şarj'],
+              cons: ['Pil ömrü iPhone\'a göre kısa', 'İkinci el değeri daha düşük'],
+              bestFor: 'Yapay zekâ ve özelleştirme isteyen Android kullanıcısı',
+            },
+            {
+              name: 'iPhone 15',
+              summary: 'Daha dengeli ve uzun ömürlü; iOS ekosisteminde sıkı entegrasyon.',
+              pros: ['Daha uzun pil ömrü', 'Akıcı arayüz', 'Yüksek ikinci el değeri'],
+              cons: ['Sınırlı özelleştirme', 'Temel modelde USB-C hızı düşük'],
+              bestFor: 'iOS dünyasında olan ve uzun ömürlü cihaz isteyen kullanıcı',
+            },
+          ],
+          winner: 'iPhone 15',
+          verdict:
+            'Günlük dengeli kullanım için iPhone 15, yapay zekâ ve özelleştirme için Galaxy S24.',
+        },
+      },
+      clarify: {
+        products: [],
+        responseText: getSceneAiText('clarify'),
+        clarify: {
+          groups: [
+            {
+              question: 'Hangi kesim?',
+              options: ['Oversized', 'Slim', 'Klasik'],
+            },
+            {
+              question: 'Renk paleti?',
+              options: ['Nötr', 'Toprak', 'Koyu', 'Pastel'],
+            },
+          ],
+          allowOther: true,
+        },
       },
       priceTr: {
         products: priceTr,
@@ -1129,8 +1265,8 @@ export default function PromoPage() {
           Verileri yükle ve oynat
         </button>
         <div style={{ fontSize: 11, color: 'var(--muted-2)', textAlign: 'center' }}>
-          ipucu: önce tam ekrana geçip sonra kayda başlayın. Üretilen görseller daha uzun ekranda kalsın isterseniz
-          `VISUAL_AUTO_CLOSE_MS` in [page.tsx](/C:/Users/dince/Desktop/btkhackathon/app/promo/page.tsx).
+          İpucu: önce tam ekrana geçip sonra kayda başlayın. Üretilen görseller daha uzun ekranda kalsın
+          isterseniz <code>VISUAL_AUTO_CLOSE_MS</code> değerini artırın.
         </div>
       </div>
     );
@@ -1227,7 +1363,7 @@ export default function PromoPage() {
           cursor: 'pointer',
         }}
       >
-        restart
+        tekrar
       </button>
       <style jsx global>{`
         .oben-promo-restart:hover {
