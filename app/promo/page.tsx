@@ -5,8 +5,9 @@ import PriceCard from '@/components/PriceCard';
 import LookCard from '@/components/LookCard';
 import VisualModal from '@/components/VisualModal';
 import ComparisonCard from '@/components/ComparisonCard';
+import CartDrawer from '@/components/CartDrawer';
 import { compressImage } from '@/lib/image';
-import type { Clarify, Comparison, Lang, Product, StandardResponse } from '@/lib/types';
+import type { CartItem, Clarify, Comparison, Lang, Product, StandardResponse } from '@/lib/types';
 
 type SceneKey =
   | 'uploadFashion'
@@ -32,6 +33,7 @@ type SceneSpec =
       openVisual?: boolean;
       source?: 'text' | 'upload';
     }
+  | { kind: 'cart'; hold: number }
   | { kind: 'reveal' }
   | { kind: 'tagline' };
 
@@ -48,7 +50,18 @@ type PreparedScene = {
   clarify?: Clarify;
 };
 
-type PreparedData = Record<SceneKey, PreparedScene>;
+type ClarifyFollowUp = {
+  picks: { question: string; option: string }[];
+  text: string;
+  products: Product[];
+  productName?: string;
+  suggestions?: { name: string; searchQuery?: string; visualDescription?: string }[];
+};
+
+type PreparedData = Record<SceneKey, PreparedScene> & {
+  clarifyFollowUp: ClarifyFollowUp;
+  cart: { items: CartItem[] };
+};
 type UploadSelection = {
   fashion?: File | null;
   price?: File | null;
@@ -144,19 +157,20 @@ const SCENES: SceneSpec[] = [
     kind: 'chat',
     lang: 'tr',
     mode: 'price',
-    prompt: 'Aynı boucle koltuğu daha ucuza bul.',
+    prompt: 'Bana krem rengi bir L koltuk bul.',
     status: 'Mağazalar taranıyor...',
     aiText: 'Aynı modeli üç mağazada buldum. En ucuzu kargo dahil — fiyatlara göre sıraladım.',
     sceneKey: 'priceTr',
     hold: 4200,
   },
+  { kind: 'cart', hold: 5600 },
   { kind: 'reveal' },
   { kind: 'tagline' },
 ];
 
 const PROMO_QUERIES = {
   price: { query: 'iPhone 15 128GB', mode: 'price' as const, language: 'en' as const },
-  priceTr: { query: 'boucle koltuk fildisi', mode: 'price' as const, language: 'tr' as const },
+  priceTr: { query: 'krem l koltuk', mode: 'price' as const, language: 'tr' as const },
   fashion: {
     queries: [
       'cream silk slip dress',
@@ -398,8 +412,8 @@ function UserUploadBubble({ preview, prompt }: { preview?: string; prompt: strin
         padding: 12,
         borderRadius: 18,
         maxWidth: '70%',
-        minWidth: 280,
-        width: 380,
+        minWidth: 200,
+        width: 240,
       }}
     >
       {preview && (
@@ -409,7 +423,7 @@ function UserUploadBubble({ preview, prompt }: { preview?: string; prompt: strin
           alt=""
           style={{
             width: '100%',
-            maxHeight: 260,
+            maxHeight: 140,
             objectFit: 'contain',
             borderRadius: 12,
             display: 'block',
@@ -424,6 +438,16 @@ function UserUploadBubble({ preview, prompt }: { preview?: string; prompt: strin
   );
 }
 
+type ChatPhase =
+  | 'typing'
+  | 'resolving'
+  | 'thinking'
+  | 'response'
+  | 'clarifyPicking'
+  | 'clarifyUserReply'
+  | 'clarifyThinking'
+  | 'clarifyFinal';
+
 function ChatScene({
   scene,
   prepared,
@@ -435,8 +459,10 @@ function ChatScene({
   onDone: () => void;
   onOpenVisual: (sceneKey: SceneKey) => void;
 }) {
-  const [phase, setPhase] = useState<'typing' | 'resolving' | 'thinking' | 'response'>('typing');
+  const [phase, setPhase] = useState<ChatPhase>('typing');
   const sceneData = prepared[scene.sceneKey];
+  const followUp = scene.sceneKey === 'clarify' ? prepared.clarifyFollowUp : null;
+  const hasClarifyFollowUp = !!(sceneData.clarify?.groups?.length && followUp);
   const typedPrompt = useTyped(scene.prompt, TYPE_SPEED, phase === 'typing', () => {
     setTimeout(() => setPhase('resolving'), 350);
   });
@@ -455,10 +481,30 @@ function ChatScene({
         const openId = window.setTimeout(() => onOpenVisual(scene.sceneKey), VISUAL_OPEN_DELAY_MS);
         return () => window.clearTimeout(openId);
       }
+      if (hasClarifyFollowUp) {
+        const id = setTimeout(() => setPhase('clarifyPicking'), 2400);
+        return () => clearTimeout(id);
+      }
       const id = setTimeout(onDone, 5200 + scene.hold);
       return () => clearTimeout(id);
     }
-  }, [phase, scene, sceneData.products.length, onDone, onOpenVisual]);
+    if (phase === 'clarifyPicking') {
+      const id = setTimeout(() => setPhase('clarifyUserReply'), 950);
+      return () => clearTimeout(id);
+    }
+    if (phase === 'clarifyUserReply') {
+      const id = setTimeout(() => setPhase('clarifyThinking'), 750);
+      return () => clearTimeout(id);
+    }
+    if (phase === 'clarifyThinking') {
+      const id = setTimeout(() => setPhase('clarifyFinal'), 1300);
+      return () => clearTimeout(id);
+    }
+    if (phase === 'clarifyFinal') {
+      const id = setTimeout(onDone, 4800);
+      return () => clearTimeout(id);
+    }
+  }, [phase, scene, sceneData.products.length, hasClarifyFollowUp, onDone, onOpenVisual]);
 
   const aiText = sceneData.responseText || scene.aiText || '';
 
@@ -466,8 +512,8 @@ function ChatScene({
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)' }}>
       <HeaderBar lang={scene.lang} mode={scene.mode} />
 
-      <section style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ maxWidth: 780, width: '100%', margin: '40px auto 0', padding: '0 28px', flex: 1 }}>
+      <section style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ maxWidth: 780, width: '100%', margin: '24px auto 24px', padding: '0 28px', flex: 1 }}>
           {(phase !== 'typing' || typedPrompt.length > 0) && (
             <div
               className="oben-msg-in"
@@ -620,38 +666,46 @@ function ChatScene({
                   >
                     {scene.lang === 'tr' ? 'Birkaç soru' : 'A few questions'}
                   </div>
-                  {sceneData.clarify.groups.map((grp, gi) => (
-                    <div key={gi} style={{ marginBottom: 12 }}>
-                      <div
-                        style={{
-                          fontSize: 12.5,
-                          color: 'var(--ink)',
-                          marginBottom: 6,
-                          fontWeight: 500,
-                          letterSpacing: '-.005em',
-                        }}
-                      >
-                        {grp.question}
+                  {sceneData.clarify.groups.map((grp, gi) => {
+                    const picked = followUp?.picks.find((p) => p.question === grp.question)?.option;
+                    const showPicked = picked && phase !== 'response';
+                    return (
+                      <div key={gi} style={{ marginBottom: 12 }}>
+                        <div
+                          style={{
+                            fontSize: 12.5,
+                            color: 'var(--ink)',
+                            marginBottom: 6,
+                            fontWeight: 500,
+                            letterSpacing: '-.005em',
+                          }}
+                        >
+                          {grp.question}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          {grp.options.map((opt) => {
+                            const isPicked = showPicked && picked === opt;
+                            return (
+                              <span
+                                key={opt}
+                                style={{
+                                  padding: '5px 11px',
+                                  borderRadius: 999,
+                                  border: `1px solid ${isPicked ? 'var(--ink)' : 'var(--line)'}`,
+                                  background: isPicked ? 'var(--ink)' : 'var(--bg-soft)',
+                                  color: isPicked ? 'var(--bg)' : 'var(--ink)',
+                                  fontSize: 12.5,
+                                  transition: 'all .2s ease',
+                                }}
+                              >
+                                {opt}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {grp.options.map((opt) => (
-                          <span
-                            key={opt}
-                            style={{
-                              padding: '5px 11px',
-                              borderRadius: 999,
-                              border: '1px solid var(--line)',
-                              background: 'var(--bg-soft)',
-                              fontSize: 12.5,
-                              color: 'var(--ink)',
-                            }}
-                          >
-                            {opt}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {sceneData.clarify.allowOther && (
                     <div
                       style={{
@@ -668,28 +722,107 @@ function ChatScene({
               ) : null}
             </div>
           )}
+
+          {followUp && (phase === 'clarifyUserReply' || phase === 'clarifyThinking' || phase === 'clarifyFinal') && (
+            <div
+              className="oben-msg-in"
+              style={{ display: 'flex', justifyContent: 'flex-end', padding: '14px 0' }}
+            >
+              <div
+                style={{
+                  background: '#F0F0EE',
+                  padding: '10px 16px',
+                  borderRadius: 18,
+                  maxWidth: '70%',
+                  fontSize: 14.5,
+                  lineHeight: 1.45,
+                  letterSpacing: '-.005em',
+                }}
+              >
+                {followUp.picks.map((p) => p.option).join(' · ')}
+              </div>
+            </div>
+          )}
+
+          {followUp && phase === 'clarifyThinking' && (
+            <div className="oben-msg-in" style={{ padding: '18px 0' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  letterSpacing: '-.005em',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    animation: 'oben-pulse 1.2s ease-in-out infinite',
+                  }}
+                />
+                <span>{scene.lang === 'tr' ? 'Düşünüyor...' : 'Thinking...'}</span>
+                <span className="oben-typing">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </div>
+            </div>
+          )}
+
+          {followUp && phase === 'clarifyFinal' && (
+            <div className="oben-msg-in" style={{ padding: '20px 0 8px' }}>
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontSize: 11,
+                  color: 'var(--muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '.12em',
+                  fontWeight: 500,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)' }}
+                />
+                OBEN
+              </div>
+              <p
+                style={{
+                  margin: '0 0 6px',
+                  fontSize: 15,
+                  lineHeight: 1.6,
+                  letterSpacing: '-.005em',
+                }}
+              >
+                {followUp.text}
+              </p>
+              {followUp.products.length > 0 && (
+                <div style={{ transform: 'translateX(-10px)', width: 'calc(100% + 20px)' }}>
+                  <LookCard
+                    variant="fashion"
+                    items={followUp.products}
+                    hasVisual={false}
+                    suggestions={followUp.suggestions}
+                    onAdd={() => {}}
+                    onOpenModal={() => {}}
+                    lang={scene.lang}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
-
-      <div style={{ borderTop: '1px solid var(--line)', padding: '14px 28px', background: 'var(--bg)' }}>
-        <div
-          style={{
-            maxWidth: 780,
-            margin: '0 auto',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            padding: '12px 14px',
-            background: 'var(--bg-soft)',
-            fontSize: 14,
-            color: 'var(--muted-2)',
-            letterSpacing: '-.005em',
-          }}
-        >
-          {scene.lang === 'tr'
-            ? 'Bir link yapıştır veya tarif et...'
-            : 'Paste a link or describe what you need...'}
-        </div>
-      </div>
 
       <style jsx>{`
         @keyframes oben-caret {
@@ -707,6 +840,315 @@ function ChatScene({
             opacity: 0.4;
             transform: scale(0.85);
           }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function CartScene({ items, hold, onDone }: { items: CartItem[]; hold: number; onDone: () => void }) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [addedCount, setAddedCount] = useState(0);
+  const [pulseIdx, setPulseIdx] = useState<number | null>(null);
+  const [flyKey, setFlyKey] = useState(0);
+  const total = items.length;
+  const done = addedCount >= total;
+
+  useEffect(() => {
+    if (done) {
+      const open = setTimeout(() => setDrawerOpen(true), 350);
+      const advance = setTimeout(onDone, hold);
+      return () => {
+        clearTimeout(open);
+        clearTimeout(advance);
+      };
+    }
+    const pulse = setTimeout(() => setPulseIdx(addedCount), 250);
+    const fly = setTimeout(() => setFlyKey((k) => k + 1), 380);
+    const add = setTimeout(() => {
+      setAddedCount((c) => c + 1);
+      setPulseIdx(null);
+    }, 950);
+    return () => {
+      clearTimeout(pulse);
+      clearTimeout(fly);
+      clearTimeout(add);
+    };
+  }, [addedCount, total, done, hold, onDone]);
+
+  const visibleItems = items.slice(0, addedCount);
+
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
+      <header
+        style={{
+          height: 54,
+          flex: '0 0 54px',
+          borderBottom: '1px solid var(--line)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 28px',
+          background: 'var(--bg)',
+        }}
+      >
+        <Logo />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div
+            style={{
+              padding: '4px 10px',
+              borderRadius: 999,
+              background: 'var(--pill)',
+              fontSize: 12,
+              fontWeight: 500,
+            }}
+          >
+            Moda
+          </div>
+          <div
+            id="oben-cart-target"
+            style={{
+              position: 'relative',
+              width: 32,
+              height: 32,
+              display: 'grid',
+              placeItems: 'center',
+              borderRadius: 6,
+              border: '1px solid var(--line)',
+              background: 'var(--bg-soft)',
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="9" cy="20" r="1.4" />
+              <circle cx="17" cy="20" r="1.4" />
+              <path d="M3 4h2l2.2 11.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L21 8H6" />
+            </svg>
+            {addedCount > 0 && (
+              <span
+                key={`badge-${addedCount}`}
+                className="oben-cart-badge"
+                style={{
+                  position: 'absolute',
+                  top: -6,
+                  right: -6,
+                  minWidth: 18,
+                  height: 18,
+                  padding: '0 5px',
+                  borderRadius: 999,
+                  background: 'var(--accent)',
+                  color: '#FFFFFF',
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  display: 'grid',
+                  placeItems: 'center',
+                }}
+              >
+                {addedCount}
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <section style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ maxWidth: 780, width: '100%', margin: '24px auto', padding: '0 28px' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 11,
+              color: 'var(--muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '.12em',
+              fontWeight: 500,
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)' }} />
+            OBEN
+          </div>
+          <p
+            style={{
+              margin: '0 0 14px',
+              fontSize: 15,
+              lineHeight: 1.6,
+              letterSpacing: '-.005em',
+              maxWidth: 520,
+            }}
+          >
+            Beğendiklerini farklı mağazalardan tek sepete topla. Toplam fiyatı görürsün, sonra
+            mağazaya tek tıkla gidersin.
+          </p>
+
+          <div
+            style={{
+              border: '1px solid var(--line)',
+              background: 'var(--bg-soft)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--line-soft)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: 12,
+                color: 'var(--muted)',
+                letterSpacing: '.04em',
+                textTransform: 'uppercase',
+                fontWeight: 500,
+              }}
+            >
+              <span>Seçili parçalar</span>
+              <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400 }}>
+                {addedCount}/{total} sepette
+              </span>
+            </div>
+            <div style={{ padding: 14, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              {items.map((it, i) => {
+                const added = i < addedCount;
+                const pulsing = pulseIdx === i;
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      position: 'relative',
+                      border: `1px solid ${pulsing ? 'var(--accent)' : 'var(--line)'}`,
+                      borderRadius: 6,
+                      padding: 10,
+                      background: 'var(--bg)',
+                      transition: 'border-color .2s, transform .2s',
+                      transform: pulsing ? 'scale(1.02)' : 'scale(1)',
+                      opacity: added ? 1 : 0.95,
+                    }}
+                  >
+                    {it.thumbnail && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={it.thumbnail}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          aspectRatio: '1 / 1',
+                          objectFit: 'cover',
+                          borderRadius: 4,
+                          background: '#F2EFE9',
+                        }}
+                      />
+                    )}
+                    <div
+                      style={{
+                        marginTop: 8,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        lineHeight: 1.35,
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {it.name}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: 11.5,
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      <span>{it.retailer}</span>
+                      <span style={{ color: 'var(--ink)', fontWeight: 500, fontVariantNumeric: 'tabular-nums' }}>
+                        {it.price !== null ? `${it.currency || 'EUR'} ${it.price}` : '—'}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: '6px 10px',
+                        borderRadius: 4,
+                        fontSize: 11.5,
+                        fontWeight: 500,
+                        textAlign: 'center',
+                        background: added ? 'var(--ink)' : pulsing ? 'var(--accent)' : 'var(--pill)',
+                        color: added || pulsing ? '#FFFFFF' : 'var(--ink)',
+                        transition: 'background .2s, color .2s',
+                      }}
+                    >
+                      {added ? '✓ Sepette' : pulsing ? 'Ekleniyor…' : 'Sepete ekle'}
+                    </div>
+                    {pulsing && (
+                      <span
+                        key={`fly-${flyKey}-${i}`}
+                        className="oben-fly"
+                        style={{
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          background: 'var(--accent)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <CartDrawer
+        open={drawerOpen}
+        items={visibleItems}
+        onClose={() => {}}
+        onRemove={() => {}}
+        onClear={() => {}}
+        lang="tr"
+      />
+
+      <style jsx>{`
+        @keyframes oben-cart-bump {
+          0% {
+            transform: scale(0.6);
+            opacity: 0;
+          }
+          60% {
+            transform: scale(1.25);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes oben-fly-anim {
+          0% {
+            transform: translate(0, 0) scale(1);
+            opacity: 1;
+          }
+          80% {
+            opacity: 0.9;
+          }
+          100% {
+            transform: translate(180px, -180px) scale(0.3);
+            opacity: 0;
+          }
+        }
+        :global(.oben-cart-badge) {
+          animation: oben-cart-bump 0.4s ease both;
+        }
+        :global(.oben-fly) {
+          animation: oben-fly-anim 0.7s cubic-bezier(0.5, 0, 0.6, 1) both;
         }
       `}</style>
     </div>
@@ -1040,6 +1482,20 @@ export default function PromoPage() {
     setProgress('Mağazalar taranıyor (fiyat · TR)...');
     const priceTr = await searchOne(PROMO_QUERIES.priceTr.query, 'price', 'tr');
 
+    setProgress('Ceket seçenekleri aranıyor...');
+    const jacketQueries = [
+      'tailored navy blazer slim',
+      'wool navy blazer slim fit',
+      'minimal slim blazer beige',
+      'structured navy single breasted blazer',
+    ];
+    const jacketAll = await Promise.all(
+      jacketQueries.map((q) => searchOne(q, 'fashion', 'tr')),
+    );
+    const jackets = jacketAll
+      .map((arr) => arr.find((p) => p.price !== null) ?? arr[0])
+      .filter((p): p is Product => !!p);
+
     setProgress('Kombin parçaları aranıyor...');
     const fashionAll = await Promise.all(
       PROMO_QUERIES.fashion.queries.map((q) => searchOne(q, 'fashion', 'tr')),
@@ -1154,6 +1610,45 @@ export default function PromoPage() {
         productName: home[0]?.name,
         suggestions: HOME_SUGGESTIONS,
         imagePrompt: HOME_IMAGE_PROMPT,
+      },
+      clarifyFollowUp: {
+        picks: [
+          { question: 'Hangi kesim?', option: 'Slim' },
+          { question: 'Renk paleti?', option: 'Nötr' },
+        ],
+        text:
+          'Slim kesim ve nötr palet için dört seçenek topladım. Lacivert, bej ve antrasit ağırlıklı; iş günü kolayca taşınır.',
+        products: jackets.length > 0
+          ? jackets
+          : buildPromptFallbackProducts(
+              ['Lacivert slim blazer', 'Bej tek düğme blazer', 'Antrasit slim ceket', 'Lacivert yün blazer'],
+              'fashion',
+            ),
+        productName: jackets[0]?.name,
+        suggestions: [
+          { name: 'Lacivert slim blazer', searchQuery: 'tailored navy blazer slim' },
+          { name: 'Bej tek düğme blazer', searchQuery: 'minimal slim blazer beige' },
+          { name: 'Antrasit slim ceket', searchQuery: 'charcoal slim blazer' },
+          { name: 'Lacivert yün blazer', searchQuery: 'wool navy blazer slim fit' },
+        ],
+      },
+      cart: {
+        items: ((): CartItem[] => {
+          const picks: Product[] = [];
+          if (fashion[0]) picks.push(fashion[0]);
+          if (home[0]) picks.push(home[0]);
+          if (priceTr[0]) picks.push(priceTr[0]);
+          if (fashion[2]) picks.push(fashion[2]);
+          return picks.map((p, i) => ({
+            id: `cart-${i}`,
+            name: p.name,
+            retailer: p.retailer,
+            price: p.price,
+            currency: p.currency,
+            link: p.link,
+            thumbnail: p.thumbnail,
+          }));
+        })(),
       },
     });
     setLoading(false);
@@ -1317,6 +1812,9 @@ export default function PromoPage() {
             setVisualKey(sceneKey);
           }}
         />
+      )}
+      {currentScene.kind === 'cart' && (
+        <CartScene key={sceneIdx} items={prepared.cart.items} hold={currentScene.hold} onDone={advance} />
       )}
       {currentScene.kind === 'reveal' && <RevealScene key={sceneIdx} onDone={advance} />}
       {currentScene.kind === 'tagline' && <TaglineScene key={sceneIdx} onDone={restart} />}
