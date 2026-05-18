@@ -94,7 +94,7 @@ export default function InputBar({
             {attachLimitNote}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 12px' }}>
+        <div className="oben-input-row" style={{ display: 'flex', alignItems: 'flex-end', gap: 10, padding: '10px 12px' }}>
           <textarea
             ref={taRef}
             className="oben-input"
@@ -138,7 +138,7 @@ export default function InputBar({
               border: 0,
             }}
           />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2 }}>
+          <div className="oben-input-controls" style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 2 }}>
             <input
               ref={fileRef}
               type="file"
@@ -170,6 +170,7 @@ export default function InputBar({
             </button>
             <BudgetChip lang={lang} budget={budget} onChange={onBudgetChange} />
             <button
+              className="oben-input-send"
               title={t('chat.send', lang)}
               onClick={onSend}
               disabled={(!value.trim() && !hasPreviews) || !!resolving}

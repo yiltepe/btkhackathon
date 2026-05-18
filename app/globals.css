@@ -117,6 +117,17 @@ a { color: inherit; text-decoration: none; }
   .oben-input-bar { padding: 8px 14px 12px !important; }
   .oben-input-disclaimer { display: none !important; }
 
+  .oben-input-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+  }
+  .oben-input-controls {
+    width: 100% !important;
+    padding-bottom: 0 !important;
+  }
+  .oben-input-send { margin-left: auto !important; }
+
   .oben-empty-prompts {
     grid-template-columns: 1fr !important;
     max-width: 100% !important;
