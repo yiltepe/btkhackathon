@@ -926,7 +926,7 @@ export default function ChatPage() {
   }, [activeId, chats, lang]);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100dvh', position: 'relative', overflow: 'hidden' }}>
       <div
         className={`oben-sidebar-backdrop${sidebarOpen ? ' open' : ''}`}
         onClick={() => setSidebarOpen(false)}

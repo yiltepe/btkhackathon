@@ -54,7 +54,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', overflowX: 'hidden', position: 'relative' }}>
+    <div style={{ minHeight: '100dvh', overflowX: 'hidden', position: 'relative' }}>
       <header
         className="oben-landing-header"
         style={{
@@ -98,7 +98,7 @@ export default function LandingPage() {
         style={{
           position: 'relative',
           zIndex: 10,
-          minHeight: '100vh',
+          minHeight: '100dvh',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
