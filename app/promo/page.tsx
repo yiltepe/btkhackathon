@@ -1192,7 +1192,7 @@ function RevealScene({ onDone }: { onDone: () => void }) {
           animation: 'oben-fade-up 1.4s ease both .35s',
         }}
       >
-        Oben.
+        OBEN
       </div>
       <style jsx>{`
         @keyframes oben-fade-up {
@@ -1239,17 +1239,6 @@ function TaglineScene({ onDone }: { onDone: () => void }) {
         }}
       >
         Alışverişin daha sakin yolu.
-      </div>
-      <div
-        style={{
-          fontSize: 12,
-          color: 'var(--muted-2)',
-          marginTop: 36,
-          letterSpacing: '.08em',
-          animation: 'oben-fade 1.2s ease both 1.1s',
-        }}
-      >
-        oben.app
       </div>
     </div>
   );
@@ -1398,6 +1387,15 @@ export default function PromoPage() {
     setRunning(false);
     setTimeout(() => setRunning(true), 50);
   };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'r' || e.key === 'R') restart();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visualScene = visualKey && prepared ? prepared[visualKey] : null;
   const visualLang = useMemo(() => {
@@ -1844,30 +1842,6 @@ export default function PromoPage() {
         />
       )}
 
-      <button
-        onClick={restart}
-        className="oben-promo-restart"
-        style={{
-          position: 'fixed',
-          bottom: 16,
-          right: 16,
-          padding: '6px 10px',
-          fontSize: 11,
-          color: 'var(--muted-2)',
-          border: '1px solid var(--line)',
-          borderRadius: 4,
-          background: 'var(--bg-soft)',
-          opacity: 0.4,
-          cursor: 'pointer',
-        }}
-      >
-        tekrar
-      </button>
-      <style jsx global>{`
-        .oben-promo-restart:hover {
-          opacity: 1 !important;
-        }
-      `}</style>
     </div>
   );
 }
